@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}WebTTY{% endblock %}</title>
+  
+  <!-- 外部依赖 -->
+  <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+  
+  <!-- 自定义样式 -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+  
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="app-layout">
+    <!-- 移动端菜单按钮 -->
+    <button class="mobile-menu-btn">
+      <i class='bx bx-menu'></i>
+    </button>
+
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+          <i class='bx bx-chevron-left'></i>
+        </button>
+        <h3 class="sidebar-title">
+          <i class='bx bx-terminal'></i>
+          <span>WebTTY</span>
+        </h3>
+        <p class="sidebar-subtitle">多设备远程会话管理</p>
+      </div>
+      
+      <div class="sidebar-nav">
+        <div class="nav-item">
+          <a href="{{ url_for('dashboard.index') }}" class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+            <i class='bx bx-home'></i>
+            <span>控制台</span>
+          </a>
+        </div>
+        <div class="nav-item">
+          <a href="{{ url_for('dashboard.clients') }}" class="nav-link {% if request.endpoint == 'dashboard.clients' %}active{% endif %}">
+            <i class='bx bx-devices'></i>
+            <span>客户端列表</span>
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">系统文件管理</div>
+
+          <div class="nav-item">
+            <a href="{{ url_for('assets.downloads') }}" class="nav-link {% if request.endpoint == 'assets.downloads' %}active{% endif %}">
+              <i class='bx bx-folder'></i>
+              <span>文件浏览器</span>
+            </a>
+          </div>
+          <div class="nav-item">
+            <a href="{{ url_for('assets.screenshots') }}" class="nav-link {% if request.endpoint == 'assets.screenshots' %}active{% endif %}">
+              <i class='bx bx-images'></i>
+              <span>截图画廊</span>
+            </a>
+          </div>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">工具</div>
+          <div class="nav-item">
+            <a href="{{ url_for('toolbox.toolbox') }}" class="nav-link {% if request.endpoint == 'toolbox.toolbox' %}active{% endif %}">
+              <i class='bx bx-box'></i>
+              <span>工具箱</span>
+            </a>
+          </div>
+          <div class="nav-item">
+            <a href="{{ url_for('assets.file_manager') }}" class="nav-link {% if request.endpoint == 'assets.shell_script' %}active{% endif %}">
+              <i class='bx bx-folder-plus'></i>
+              <span>一键执行</span>
+            </a>
+          </div>
+          <div class="nav-item">
+            <a href="{{ url_for('assets.commands') }}" class="nav-link {% if request.endpoint == 'assets.commands' %}active{% endif %}">
+              <i class='bx bx-command'></i>
+              <span>命令查询</span>
+            </a>
+          </div>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">系统</div>
+          <div class="nav-item">
+            <a href="{{ url_for('admin_panel.admin_panel') }}" class="nav-link {% if request.endpoint == 'admin_panel.admin_panel' %}active{% endif %}">
+              <i class='bx bx-cog'></i>
+              <span>系统管理</span>
+            </a>
+          </div>
+        </div>
+        
+        <div class="nav-item mt-auto">
+          <a href="{{ url_for('auth.logout') }}" class="nav-link text-danger">
+            <i class='bx bx-log-out'></i>
+            <span>退出登录</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 侧边栏遮罩层 -->
+    <div class="sidebar-overlay"></div>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+      <div class="content-wrapper">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <!-- Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+  
+  <!-- 侧边栏切换功能 -->
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.querySelector('.sidebar');
+      const mainContent = document.querySelector('.main-content');
+      const toggleIcon = document.querySelector('.sidebar-toggle i');
+      const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+      
+      sidebar.classList.toggle('collapsed');
+      mainContent.classList.toggle('expanded');
+      
+      if (sidebar.classList.contains('collapsed')) {
+        toggleIcon.className = 'bx bx-chevron-right';
+      } else {
+        toggleIcon.className = 'bx bx-chevron-left';
+      }
+      
+      // 移动端菜单处理
+      if (window.innerWidth <= 768) {
+        if (sidebar.classList.contains('mobile-open')) {
+          sidebar.classList.remove('mobile-open');
+          document.querySelector('.sidebar-overlay').classList.remove('active');
+        }
+      }
+    }
+    
+    // 移动端菜单切换
+    document.addEventListener('DOMContentLoaded', function() {
+      const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+      const sidebar = document.querySelector('.sidebar');
+      const overlay = document.querySelector('.sidebar-overlay');
+      
+      if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => {
+          sidebar.classList.toggle('mobile-open');
+          overlay.classList.toggle('active');
+        });
+      }
+      
+      if (overlay) {
+        overlay.addEventListener('click', () => {
+          sidebar.classList.remove('mobile-open');
+          overlay.classList.remove('active');
+        });
+      }
+    });
+  </script>
+  
+  <!-- 页面特定的JavaScript -->
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

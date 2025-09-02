@@ -1,0 +1,68 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}VNC 连接 - {{ host }}:{{ port }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .vnc-container {
+    height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    background: #000;
+  }
+  #vnc-status {
+    background-color: #333;
+    color: white;
+    padding: 5px 10px;
+    font-family: monospace;
+  }
+  #vnc-screen {
+    flex-grow: 1;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-desktop'></i>
+    <div>
+      <h1>VNC 远程桌面</h1>
+      <p class="page-subtitle">{{ username }}@{{ host }}:{{ port }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="vnc-container">
+    <div id="vnc-status">正在连接...</div>
+    <div id="vnc-screen"></div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import RFB from '{{ url_for("static", filename="js/novnc/core/rfb.js") }}';
+
+    const host = '{{ host }}';
+    const port = '{{ port }}';
+    const password = '{{ password }}';
+
+    const rfb = new RFB(document.getElementById('vnc-screen'), `ws://${window.location.hostname}:6080/websockify`, {
+        credentials: { password: password },
+    });
+
+    const statusEl = document.getElementById('vnc-status');
+
+    rfb.addEventListener("connect", () => {
+        statusEl.innerText = "已连接到 " + host + ":" + port;
+    });
+
+    rfb.addEventListener("disconnect", (e) => {
+        statusEl.innerText = "连接已断开: " + e.detail.reason;
+        console.error('VNC Disconnected:', e.detail);
+    });
+
+</script>
+{% endblock %}
+

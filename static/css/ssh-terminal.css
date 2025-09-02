@@ -1,0 +1,136 @@
+/* SSH终端专用样式 */
+.ssh-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  gap: 1rem;
+}
+
+.ssh-connection-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.ssh-terminal-container {
+  flex: 1;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.connection-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.connection-form .form-group {
+  margin-bottom: 0;
+}
+
+.terminal-header {
+  background: linear-gradient(135deg, #333, #2a2a2a);
+  color: white;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #444;
+}
+
+.terminal-header .terminal-dots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminal-header .terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.terminal-header .terminal-dot.red { background: #ff5f56; }
+.terminal-header .terminal-dot.yellow { background: #ffbd2e; }
+.terminal-header .terminal-dot.green { background: #27ca3f; }
+
+.terminal-header .terminal-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.terminal-header .terminal-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.terminal-header .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger-color);
+  animation: pulse 2s infinite;
+}
+
+.terminal-header .status-dot.connected {
+  background: var(--success-color);
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.terminal-dot.red { background: #ff5f56; }
+.terminal-dot.yellow { background: #ffbd2e; }
+.terminal-dot.green { background: #27ca3f; }
+
+#terminal-wrapper {
+  flex: 1;
+  background: #1e1e1e;
+  min-height: 0;
+}
+
+.connection-status {
+  padding: 0.75rem 1rem;
+  background: var(--light-bg);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.connection-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .connection-form {
+    grid-template-columns: 1fr;
+  }
+  
+  .ssh-connection-panel {
+    padding: 1rem;
+  }
+}

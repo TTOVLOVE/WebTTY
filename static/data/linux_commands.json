@@ -1,0 +1,58 @@
+[
+  {
+    "name": "ls",
+    "description": "列出目录内容",
+    "example": "ls -la /home",
+    "category": "文件系统",
+    "icon": "bx-folder"
+  },
+  {
+    "name": "ps",
+    "description": "显示进程状态",
+    "example": "ps aux",
+    "category": "进程",
+    "icon": "bx-list-ul"
+  },
+  {
+    "name": "netstat",
+    "description": "显示网络连接状态",
+    "example": "netstat -tulpn",
+    "category": "网络",
+    "icon": "bx-globe"
+  },
+  {
+    "name": "ifconfig",
+    "description": "显示网络接口配置",
+    "example": "ifconfig eth0",
+    "category": "网络",
+    "icon": "bx-network-chart"
+  },
+  {
+    "name": "top",
+    "description": "显示系统进程实时状态",
+    "example": "top",
+    "category": "系统",
+    "icon": "bx-trending-up"
+  },
+  {
+    "name": "df",
+    "description": "显示磁盘使用情况",
+    "example": "df -h",
+    "category": "文件系统",
+    "icon": "bx-hdd"
+  },
+  {
+    "name": "whoami",
+    "description": "显示当前用户信息",
+    "example": "whoami",
+    "category": "用户",
+    "icon": "bx-user"
+  },
+  {
+    "name": "cat",
+    "description": "查看文件内容",
+    "example": "cat /etc/passwd",
+    "category": "文件系统",
+    "icon": "bx-file"
+  }
+]

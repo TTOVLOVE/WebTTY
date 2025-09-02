@@ -1,0 +1,145 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}命令控制台 - WebTTY{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-terminal'></i>
+    <div>
+      <h1>命令控制台</h1>
+    </div>
+  </div>
+  <div class="page-actions">
+    <div class="status-indicator">
+      <div class="status-dot online"></div>
+      <span class="status-text">服务运行中</span>
+    </div>
+  </div>
+</div>
+
+<div class="console-layout">
+  <!-- 快捷命令面板 -->
+  <div class="quick-commands-panel">
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label for="client-select" class="form-label">选择客户端</label>
+        <select id="client-select" class="form-select form-select-sm">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">快捷命令</label>
+        <div class="command-group">
+          <button class="command-btn btn-success" onclick="sendQuickCommand('screenshot')">
+            <i class='bx bx-camera'></i>
+            截屏
+          </button>
+          <button class="command-btn btn-warning" onclick="showInput('download')">
+            <i class='bx bx-download'></i>
+            下载文件
+          </button>
+          <div class="command-btn" onclick="useCommand('whoami')">
+            <i class='bx bx-user'></i>
+            whoami
+          </div>
+          <div class="command-btn" onclick="useCommand('dir')">
+            <i class='bx bx-folder'></i>
+            dir
+          </div>
+          <div class="command-btn" onclick="useCommand('ipconfig')">
+            <i class='bx bx-network-chart'></i>
+            ipconfig
+          </div>
+          <div class="command-btn" onclick="useCommand('netstat -an')">
+            <i class='bx bx-globe'></i>
+            netstat
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="param-input" class="param-input">
+      <div class="row g-2">
+        <div class="col-12 d-flex justify-content-between align-items-center mb-2">
+          <small class="text-muted">输入要下载的文件路径</small>
+          <button type="button" class="btn-close btn-close-sm" onclick="hideInput()"></button>
+        </div>
+        <div class="col-md-10">
+          <input type="text" id="param-value" class="form-control form-control-sm" 
+                 placeholder="输入要下载的文件路径，例如：C:\Users\用户名\Desktop\test.txt">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary btn-sm w-100" onclick="sendParamCommand()">
+            <i class='bx bx-download'></i>
+            下载
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 终端输出区域 -->
+  <div class="terminal-container">
+    <div class="terminal-header">
+      <div class="terminal-dots">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+      </div>
+      <div class="terminal-title">命令输出终端</div>
+    </div>
+    <div class="terminal" id="output">
+      <!-- 命令输出将在这里显示 -->
+    </div>
+  </div>
+
+  <!-- 命令输入区域 -->
+  <div class="command-input-panel">
+    <div class="input-group">
+      <span class="input-group-text">
+        <i class='bx bx-terminal'></i>
+      </span>
+      <input type="text" class="form-control" id="command-input" placeholder="输入命令..." onkeypress="handleCommandKey(event)">
+      <button class="btn btn-primary" onclick="sendCommand()">
+        <i class='bx bx-send'></i>
+        发送
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 截图模态框 -->
+<div class="modal-overlay" id="screenshotModal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title">新截图</h5>
+      <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <img id="screenshotImage" src="" class="modal-image" alt="Screenshot">
+    </div>
+    <div class="modal-footer">
+      <a id="screenshotDownloadLink" href="#" class="btn btn-primary" download>
+        <i class='bx bx-download'></i>
+        下载图片
+      </a>
+      <a href="{{ url_for('assets.screenshots') }}" class="btn btn-secondary">
+        <i class='bx bx-images'></i>
+        查看画廊
+      </a>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">
+        关闭
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

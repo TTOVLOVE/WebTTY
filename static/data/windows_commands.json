@@ -1,0 +1,58 @@
+[
+  {
+    "name": "dir",
+    "description": "显示目录中的文件和子目录列表",
+    "example": "dir C:\\Windows",
+    "category": "文件系统",
+    "icon": "bx-folder"
+  },
+  {
+    "name": "ipconfig",
+    "description": "显示所有网络适配器的IP配置信息",
+    "example": "ipconfig /all",
+    "category": "网络",
+    "icon": "bx-network-chart"
+  },
+  {
+    "name": "netstat",
+    "description": "显示活动的TCP连接、计算机监听的端口、以太网统计信息",
+    "example": "netstat -an",
+    "category": "网络",
+    "icon": "bx-globe"
+  },
+  {
+    "name": "tasklist",
+    "description": "显示所有正在运行的进程",
+    "example": "tasklist /v",
+    "category": "进程",
+    "icon": "bx-list-ul"
+  },
+  {
+    "name": "systeminfo",
+    "description": "显示系统配置信息",
+    "example": "systeminfo",
+    "category": "系统",
+    "icon": "bx-info-circle"
+  },
+  {
+    "name": "whoami",
+    "description": "显示当前登录用户的用户名和权限信息",
+    "example": "whoami /all",
+    "category": "用户",
+    "icon": "bx-user"
+  },
+  {
+    "name": "net user",
+    "description": "显示用户账户信息",
+    "example": "net user",
+    "category": "用户",
+    "icon": "bx-group"
+  },
+  {
+    "name": "ping",
+    "description": "测试网络连接",
+    "example": "ping www.google.com",
+    "category": "网络",
+    "icon": "bx-wifi"
+  }
+]

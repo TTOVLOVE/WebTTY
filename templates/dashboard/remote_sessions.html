@@ -1,0 +1,154 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}远程会话 - WebTTY{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+<style>
+.remote-tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1rem;
+}
+.remote-tab {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--light-bg);
+  font-weight: 500;
+}
+.remote-tab.active {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+}
+.session-panel {
+  display: none;
+}
+.session-panel.active {
+  display: block;
+}
+.viewer-container {
+  height: calc(100vh - 220px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  overflow: hidden;
+}
+iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-desktop'></i>
+    <div>
+      <h1>远程会话</h1>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 切换 -->
+<div class="remote-tabs">
+  <div class="remote-tab active" data-target="ssh-panel">SSH</div>
+  <div class="remote-tab" data-target="vnc-panel">VNC</div>
+  <div class="remote-tab" data-target="rdp-panel">RDP</div>
+</div>
+
+<!-- SSH 面板 -->
+<div id="ssh-panel" class="session-panel active">
+  {% include "assets/ssh_view.html" %}
+</div>
+
+<!-- VNC 面板 -->
+<div id="vnc-panel" class="session-panel">
+  <form class="connection-form" id="vnc-form">
+    <div>
+      <label class="form-label">服务器地址</label>
+      <input type="text" id="vnc-host" class="form-control" placeholder="192.168.1.50" required>
+    </div>
+    <div>
+      <label class="form-label">端口</label>
+      <input type="number" id="vnc-port" class="form-control" value="5900">
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary w-100">
+        <i class='bx bx-plug'></i> 连接
+      </button>
+    </div>
+  </form>
+  <div class="viewer-container mt-3" id="vnc-viewer"></div>
+</div>
+
+<!-- RDP 面板 -->
+<div id="rdp-panel" class="session-panel">
+  <form class="connection-form" id="rdp-form">
+    <div>
+      <label class="form-label">服务器地址</label>
+      <input type="text" id="rdp-host" class="form-control" placeholder="192.168.1.80" required>
+    </div>
+    <div>
+      <label class="form-label">端口</label>
+      <input type="number" id="rdp-port" class="form-control" value="3389">
+    </div>
+    <div>
+      <label class="form-label">用户名</label>
+      <input type="text" id="rdp-user" class="form-control" required>
+    </div>
+    <div>
+      <label class="form-label">密码</label>
+      <input type="password" id="rdp-pass" class="form-control" required>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary w-100">
+        <i class='bx bx-plug'></i> 连接
+      </button>
+    </div>
+  </form>
+  <div class="viewer-container mt-3">
+    <iframe id="rdp-viewer" src=""></iframe>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script>
+/* --- Tab 切换逻辑 --- */
+document.querySelectorAll('.remote-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.remote-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.session-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.target).classList.add('active');
+  });
+});
+
+/* --- VNC 连接逻辑 --- */
+document.getElementById('vnc-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const host = document.getElementById('vnc-host').value;
+  const port = document.getElementById('vnc-port').value;
+  document.getElementById('vnc-viewer').innerHTML = `
+    <iframe src="/vnc/start?host=${host}&port=${port}" style="width:100%;height:100%;border:none"></iframe>
+  `;
+});
+
+/* --- RDP 连接逻辑 --- */
+document.getElementById('rdp-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const host = document.getElementById('rdp-host').value;
+  const port = document.getElementById('rdp-port').value;
+  const user = document.getElementById('rdp-user').value;
+  const pass = document.getElementById('rdp-pass').value;
+  document.getElementById('rdp-viewer').src = `/rdp/start?host=${host}&port=${port}&user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>VNC Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+    
+    .vnc-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+    
+    .vnc-header {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+    }
+    
+    .vnc-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    
+    .vnc-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: rgba(72, 187, 120, 0.2);
+      border-radius: 20px;
+      font-size: 0.875rem;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #48bb78;
+      animation: pulse 2s infinite;
+    }
+    
+    #screen {
+      flex: 1;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .loading {
+      color: white;
+      text-align: center;
+    }
+    
+    .loading i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="vnc-container">
+    <div class="vnc-header">
+      <div class="vnc-title">
+        <i class='bx bx-desktop'></i>
+        VNC 远程桌面
+      </div>
+      <div class="vnc-status">
+        <div class="status-dot"></div>
+        <span>已连接</span>
+      </div>
+    </div>
+    <div id="screen">
+      <div class="loading">
+        <i class='bx bx-loader-alt'></i>
+        <p>正在连接到远程桌面...</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 使用本地 noVNC 构建 -->
+  <script src="/static/novnc/lib/rfb.js"></script>
+  <script>
+    const wsURL = "{{ ws_url }}";
+    
+    // 移除加载提示
+    setTimeout(() => {
+      document.querySelector('.loading').style.display = 'none';
+    }, 1000);
+    
+    try {
+      const rfb = new RFB(document.getElementById('screen'), wsURL, { credentials: {} });
+      rfb.viewOnly = false;
+      rfb.scaleViewport = true;
+      rfb.resizeSession = true;
+      
+      rfb.addEventListener('connect', () => {
+        console.log('VNC连接成功');
+        document.querySelector('.vnc-status span').textContent = '已连接';
+      });
+      
+      rfb.addEventListener('disconnect', () => {
+        console.log('VNC连接断开');
+        document.querySelector('.vnc-status span').textContent = '连接断开';
+        document.querySelector('.status-dot').style.background = '#f56565';
+      });
+      
+    } catch (error) {
+      console.error('VNC连接失败:', error);
+      document.getElementById('screen').innerHTML = `
+        <div class="loading">
+          <i class='bx bx-error-circle' style="color: #f56565;"></i>
+          <p>连接失败: ${error.message}</p>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

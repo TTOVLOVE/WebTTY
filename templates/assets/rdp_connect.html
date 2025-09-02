@@ -1,0 +1,52 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}RDP 连接 - {{ host }}:{{ port }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rdp-container {
+    height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    color: white;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .rdp-container h2 {
+      margin-bottom: 1rem;
+  }
+  .rdp-container p {
+      margin-bottom: 2rem;
+  }
+  .rdp-link {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: bold;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-laptop'></i>
+    <div>
+      <h1>RDP 远程桌面</h1>
+      <p class="page-subtitle">{{ username }}@{{ host }}:{{ port }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="rdp-container">
+    <h2>RDP 连接准备就绪</h2>
+    <p>您的 RDP 连接已准备好。请使用支持 RDP 协议的客户端进行连接。</p>
+    <a href="rdp://full%20address=s:{{ host }}:{{ port }}&username=s:{{ username }}" class="btn btn-primary">
+        <i class='bx bx-play-circle'></i>
+        启动 RDP 客户端
+    </a>
+</div>
+
+{% endblock %}
+

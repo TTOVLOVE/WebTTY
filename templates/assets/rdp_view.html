@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>RDP Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+    
+    .rdp-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+    
+    .rdp-header {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+    }
+    
+    .rdp-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    
+    .rdp-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: rgba(72, 187, 120, 0.2);
+      border-radius: 20px;
+      font-size: 0.875rem;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #48bb78;
+      animation: pulse 2s infinite;
+    }
+    
+    .rdp-frame {
+      flex: 1;
+      border: none;
+      background: #000;
+    }
+    
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      text-align: center;
+      z-index: 10;
+    }
+    
+    .loading i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="rdp-container">
+    <div class="rdp-header">
+      <div class="rdp-title">
+        <i class='bx bx-desktop'></i>
+        RDP 远程桌面
+      </div>
+      <div class="rdp-status">
+        <div class="status-dot"></div>
+        <span>正在连接</span>
+      </div>
+    </div>
+    <div style="flex: 1; position: relative;">
+      <div class="loading">
+        <i class='bx bx-loader-alt'></i>
+        <p>正在连接到远程桌面...</p>
+      </div>
+      <iframe class="rdp-frame" src="{{ guac_url }}" allowfullscreen onload="handleFrameLoad()"></iframe>
+    </div>
+  </div>
+  
+  <script>
+    function handleFrameLoad() {
+      // 隐藏加载提示
+      setTimeout(() => {
+        const loading = document.querySelector('.loading');
+        if (loading) {
+          loading.style.display = 'none';
+        }
+        document.querySelector('.rdp-status span').textContent = '已连接';
+      }, 2000);
+    }
+    
+    // 监听iframe加载错误
+    document.querySelector('.rdp-frame').addEventListener('error', () => {
+      document.querySelector('.loading').innerHTML = `
+        <i class='bx bx-error-circle' style="color: #f56565;"></i>
+        <p>连接失败，请检查服务器配置</p>
+      `;
+      document.querySelector('.rdp-status span').textContent = '连接失败';
+      document.querySelector('.status-dot').style.background = '#f56565';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}SSH连接 - WebTTY{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <i class='bx bx-terminal'></i>
+    <div>
+      <h1>SSH连接</h1>
+      <p class="page-subtitle">连接到远程SSH服务器</p>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class='bx bx-link'></i> 连接信息</h5>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">主机地址</label>
+          <input type="text" class="form-control" id="host" value="{{ host }}" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">端口</label>
+          <input type="number" class="form-control" id="port" value="{{ port }}" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">用户名</label>
+          <input type="text" class="form-control" id="username" value="{{ username }}" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">密码</label>
+          <input type="password" class="form-control" id="password" placeholder="输入密码">
+        </div>
+        <button class="btn btn-primary" onclick="connectSSH()">
+          <i class='bx bx-plug'></i> 连接
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class='bx bx-info-circle'></i> 连接状态</h5>
+      </div>
+      <div class="card-body">
+        <div id="connection-status">
+          <div class="text-center text-muted">
+            <i class='bx bx-link-alt' style="font-size: 3rem; color: #ddd;"></i>
+            <p>等待连接...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SSH终端区域 -->
+<div class="card mt-4" id="ssh-terminal" style="display: none;">
+  <div class="card-header">
+    <h5><i class='bx bx-terminal'></i> SSH终端</h5>
+    <button class="btn btn-outline-danger btn-sm" onclick="disconnectSSH()">
+      <i class='bx bx-x'></i> 断开连接
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="terminal-container">
+      <div class="terminal" id="ssh-output">
+        <!-- SSH输出将在这里显示 -->
+      </div>
+      <div class="terminal-input">
+        <input type="text" class="form-control" id="ssh-command" placeholder="输入命令..." onkeypress="handleSSHCommand(event)">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.terminal-container {
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 15px;
+    color: #fff;
+}
+
+.terminal {
+    background: #000;
+    border-radius: 5px;
+    padding: 10px;
+    height: 300px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.terminal-input input {
+    background: #2d2d2d;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 5px;
+}
+
+.terminal-input input:focus {
+    background: #2d2d2d;
+    border-color: #667eea;
+    color: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.terminal-input input::placeholder {
+    color: #888;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let sshSessionId = null;
+
+function connectSSH() {
+    const password = document.getElementById('password').value;
+    if (!password) {
+        alert('请输入密码');
+        return;
+    }
+    
+    const connectionData = {
+        host: document.getElementById('host').value,
+        port: parseInt(document.getElementById('port').value),
+        username: document.getElementById('username').value,
+        password: password
+    };
+    
+    // 显示连接中状态
+    document.getElementById('connection-status').innerHTML = `
+        <div class="text-center text-primary">
+            <div class="spinner-border" role="status"></div>
+            <p class="mt-2">正在连接...</p>
+        </div>
+    `;
+    
+    fetch('/api/ssh/connect', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(connectionData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            sshSessionId = data.session_id;
+            showSSHTerminal();
+            updateConnectionStatus('success', data.message);
+        } else {
+            updateConnectionStatus('error', '连接失败');
+        }
+    })
+    .catch(error => {
+        console.error('SSH连接失败:', error);
+        updateConnectionStatus('error', '连接失败');
+    });
+}
+
+function showSSHTerminal() {
+    document.getElementById('ssh-terminal').style.display = 'block';
+    document.getElementById('ssh-output').innerHTML = '<span class="text-success">✓ SSH连接已建立</span><br>';
+}
+
+function disconnectSSH() {
+    if (sshSessionId) {
+        // 这里应该实现断开SSH连接的逻辑
+        sshSessionId = null;
+        document.getElementById('ssh-terminal').style.display = 'none';
+        updateConnectionStatus('disconnected', '连接已断开');
+    }
+}
+
+function updateConnectionStatus(type, message) {
+    const statusDiv = document.getElementById('connection-status');
+    
+    if (type === 'success') {
+        statusDiv.innerHTML = `
+            <div class="text-center text-success">
+                <i class='bx bx-check-circle' style="font-size: 3rem;"></i>
+                <p class="mt-2">${message}</p>
+            </div>
+        `;
+    } else if (type === 'error') {
+        statusDiv.innerHTML = `
+            <div class="text-center text-danger">
+                <i class='bx bx-x-circle' style="font-size: 3rem;"></i>
+                <p class="mt-2">${message}</p>
+            </div>
+        `;
+    } else if (type === 'disconnected') {
+        statusDiv.innerHTML = `
+            <div class="text-center text-muted">
+                <i class='bx bx-link-alt' style="font-size: 3rem; color: #ddd;"></i>
+                <p>${message}</p>
+            </div>
+        `;
+    }
+}
+
+function handleSSHCommand(event) {
+    if (event.key === 'Enter') {
+        const command = event.target.value;
+        if (command.trim()) {
+            // 显示命令
+            const output = document.getElementById('ssh-output');
+            output.innerHTML += `<span class="text-primary">$ ${command}</span><br>`;
+            
+            // 这里应该实现发送SSH命令的逻辑
+            // 暂时显示模拟输出
+            setTimeout(() => {
+                output.innerHTML += `<span class="text-muted">模拟输出: 命令已执行</span><br>`;
+                output.scrollTop = output.scrollHeight;
+            }, 500);
+            
+            event.target.value = '';
+        }
+    }
+}
+</script>
+{% endblock %}

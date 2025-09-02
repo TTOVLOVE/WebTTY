@@ -1,0 +1,257 @@
+/* 文件管理器专用样式 */
+.file-manager-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  gap: 0.75rem;
+}
+
+.file-manager-toolbar {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.file-manager-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.file-list-panel, .file-content-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+  color: white;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.file-table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.file-table th,
+.file-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-table th {
+  background: var(--light-bg);
+  font-weight: 600;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 0.875rem;
+}
+
+.file-table tbody tr:hover {
+  background: var(--light-bg);
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.file-actions .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.file-content {
+  flex: 1;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.file-content pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 100%;
+  overflow: auto;
+  margin: 0;
+}
+
+.status-bar {
+  padding: 0.5rem 0.75rem;
+  background: var(--light-bg);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.upload-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upload-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+  display: none;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  background: var(--success-color);
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.client-selector {
+  margin-bottom: 0;
+  background: var(--light-bg);
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.client-selector .form-group {
+    margin-bottom: 0;
+}
+
+.client-selector select {
+  width: 100%;
+  max-width: 300px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #e8f5e8;
+  border-radius: 20px;
+  color: #28a745;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.status-indicator i {
+  font-size: 1.1rem;
+}
+
+#client-select {
+  font-size: 1.05em;
+  padding: 0.5em;
+}
+
+#client-info-panel {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 0.5em 1em;
+  margin-top: 0.5em;
+  min-height: 2em;
+  font-size: 0.95em;
+  color: #555;
+}
+
+.client-info-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.client-info-row:last-child {
+  margin-bottom: 0;
+}
+
+.client-info-label {
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 80px;
+}
+
+.client-info-value {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .file-manager-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  
+  .file-manager-toolbar {
+    padding: 0.75rem;
+  }
+  
+  .file-manager-toolbar .row > div {
+    margin-bottom: 0.5rem;
+  }
+  
+  .client-info-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .client-info-label {
+    min-width: auto;
+  }
+}
+
+/* 模态框中的文件管理器样式调整 */
+.modal-version .file-table th,
+.modal-version .file-table td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.modal-version .file-actions .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+.modal-version .upload-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-version .upload-progress {
+  margin-top: 0.5rem;
+}

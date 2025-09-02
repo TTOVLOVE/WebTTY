@@ -1,0 +1,560 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}一键执行 - WebTTY{% endblock %}
+
+{% block extra_css %}
+<style>
+  .script-executor {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1rem;
+    height: calc(100vh - 120px);
+  }
+  
+  .client-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .client-checklist, .script-library {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    overflow-y: auto;
+    background: var(--card-bg);
+    flex: 1;
+  }
+  
+  .client-checklist h5, .script-library h5 {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  
+  .script-executor-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .script-input-area, .results-area {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    background: var(--card-bg);
+  }
+  
+  .script-input-area {
+    flex-shrink: 0;
+  }
+  
+  .results-area {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 300px;
+  }
+  
+  #script-editor {
+    width: 100%;
+    min-height: 200px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.875rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    resize: vertical;
+  }
+  
+  #script-editor:focus {
+    border-color: var(--primary-color);
+    outline: none;
+  }
+  
+  #execution-results {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .script-item {
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--light-bg);
+  }
+  
+  .script-item:hover {
+    border-color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.05);
+  }
+  
+  .script-item.selected {
+    border-color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.1);
+  }
+  
+  .script-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+  }
+  
+  .script-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  
+  .execution-mode {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .mode-option {
+    flex: 1;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--light-bg);
+  }
+  
+  .mode-option.active {
+    border-color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.1);
+  }
+  
+  .mode-option i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+  }
+  
+  .mode-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+  }
+  
+  .mode-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  
+  .client-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .client-item input[type="checkbox"] {
+    margin-right: 0.5rem;
+  }
+  
+  .client-info {
+    flex: 1;
+    font-size: 0.875rem;
+  }
+  
+  .client-name {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  
+  .client-details {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+  
+  @media (max-width: 768px) {
+    .script-executor {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height: calc(100vh - 140px);
+    }
+    
+    .client-panel {
+      flex-direction: row;
+      height: auto;
+    }
+    
+    .client-checklist, .script-library {
+      flex: 1;
+      max-height: 200px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-code-alt'></i>
+    <div>
+      <h1>一键执行</h1>
+      <p class="page-subtitle">批量执行脚本和命令到多个客户端</p>
+    </div>
+  </div>
+</div>
+
+<div class="script-executor">
+  <!-- 左侧面板 -->
+  <div class="client-panel">
+    <!-- 客户端选择 -->
+    <div class="client-checklist">
+      <h5><i class='bx bx-devices'></i> 选择客户端</h5>
+      <div id="client-list">
+        <p class="text-muted">正在加载客户端...</p>
+      </div>
+    </div>
+    
+    <!-- 脚本库 -->
+    <div class="script-library">
+      <h5><i class='bx bx-library'></i> 脚本库</h5>
+      <div id="script-list">
+        <div class="script-item" onclick="selectScript('system_info')">
+          <div class="script-name">系统信息</div>
+          <div class="script-description">获取系统基本信息</div>
+        </div>
+        <div class="script-item" onclick="selectScript('network_info')">
+          <div class="script-name">网络信息</div>
+          <div class="script-description">获取网络配置信息</div>
+        </div>
+        <div class="script-item" onclick="selectScript('disk_info')">
+          <div class="script-name">磁盘信息</div>
+          <div class="script-description">获取磁盘使用情况</div>
+        </div>
+        <div class="script-item" onclick="selectScript('process_list')">
+          <div class="script-name">进程列表</div>
+          <div class="script-description">获取运行中的进程</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 右侧主要区域 -->
+  <div class="script-executor-main">
+    <!-- 执行模式选择 -->
+    <div class="execution-mode">
+      <div class="mode-option active" onclick="setExecutionMode('custom')" id="mode-custom">
+        <i class='bx bx-edit'></i>
+        <div class="mode-title">自定义脚本</div>
+        <div class="mode-description">编写自定义命令或脚本</div>
+      </div>
+      <div class="mode-option" onclick="setExecutionMode('library')" id="mode-library">
+        <i class='bx bx-library'></i>
+        <div class="mode-title">脚本库</div>
+        <div class="mode-description">使用预定义的脚本模板</div>
+      </div>
+    </div>
+    
+    <!-- 脚本输入区域 -->
+    <div class="script-input-area">
+      <div class="form-group mb-3">
+        <label for="script-editor" class="form-label">
+          <i class='bx bx-code-alt'></i> 脚本内容
+        </label>
+        <textarea id="script-editor" placeholder="输入要执行的命令或脚本...&#10;例如：&#10;whoami&#10;systeminfo&#10;dir C:\">whoami
+systeminfo
+ipconfig /all</textarea>
+      </div>
+      
+      <div class="d-flex gap-2">
+        <button id="execute-script" class="btn btn-primary">
+          <i class='bx bx-play'></i> 执行脚本
+        </button>
+        <button id="save-script" class="btn btn-secondary">
+          <i class='bx bx-save'></i> 保存脚本
+        </button>
+        <button id="clear-results" class="btn btn-outline-secondary">
+          <i class='bx bx-trash'></i> 清空结果
+        </button>
+      </div>
+    </div>
+    
+    <!-- 执行结果区域 -->
+    <div class="results-area">
+      <h5><i class='bx bx-terminal'></i> 执行结果</h5>
+      <div id="execution-results">等待执行脚本...</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const socket = io();
+  let selectedClients = [];
+  let currentMode = 'custom';
+  let availableClients = {};
+  
+  // 预定义脚本
+  const scriptTemplates = {
+    system_info: {
+      name: '系统信息',
+      description: '获取系统基本信息',
+      content: `systeminfo
+whoami
+echo %COMPUTERNAME%
+echo %USERNAME%`
+    },
+    network_info: {
+      name: '网络信息', 
+      description: '获取网络配置信息',
+      content: `ipconfig /all
+netstat -an | findstr LISTEN
+arp -a`
+    },
+    disk_info: {
+      name: '磁盘信息',
+      description: '获取磁盘使用情况', 
+      content: `dir C:\\ /s
+wmic logicaldisk get size,freespace,caption`
+    },
+    process_list: {
+      name: '进程列表',
+      description: '获取运行中的进程',
+      content: `tasklist /v
+wmic process get name,processid,parentprocessid`
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initializeSocket();
+    loadClients();
+    setupEventListeners();
+  });
+  
+  function initializeSocket() {
+    socket.on('connect', () => {
+      console.log('已连接到服务器');
+      loadClients();
+    });
+
+    socket.on('clients_list', (data) => {
+      updateClientList(data.clients);
+    });
+
+    socket.on('command_result', (data) => {
+      handleExecutionResult(data);
+    });
+  }
+  
+  function setupEventListeners() {
+    document.getElementById('execute-script').addEventListener('click', executeScript);
+    document.getElementById('save-script').addEventListener('click', saveScript);
+    document.getElementById('clear-results').addEventListener('click', clearResults);
+  }
+  
+  function loadClients() {
+    socket.emit('get_clients');
+  }
+  
+  function updateClientList(clients) {
+    availableClients = clients || {};
+    const listEl = document.getElementById('client-list');
+    listEl.innerHTML = '';
+    
+    const clientIds = Object.keys(availableClients);
+    
+    if (clientIds.length === 0) {
+      listEl.innerHTML = '<p class="text-muted">暂无在线客户端</p>';
+      return;
+    }
+    
+    clientIds.forEach(clientId => {
+      const client = availableClients[clientId];
+      const item = document.createElement('div');
+      item.className = 'client-item';
+      item.innerHTML = `
+        <input type="checkbox" id="client-${clientId}" value="${clientId}" onchange="updateSelectedClients()">
+        <label for="client-${clientId}" class="client-info">
+          <div class="client-name">客户端 ${clientId}</div>
+          <div class="client-details">${client.user || '未知用户'} @ ${client.addr || '未知IP'}</div>
+        </label>
+      `;
+      listEl.appendChild(item);
+    });
+  }
+  
+  function updateSelectedClients() {
+    selectedClients = Array.from(document.querySelectorAll('#client-list input:checked')).map(el => el.value);
+    console.log('已选择客户端:', selectedClients);
+  }
+  
+  function setExecutionMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.mode-option').forEach(el => el.classList.remove('active'));
+    document.getElementById(`mode-${mode}`).classList.add('active');
+    
+    if (mode === 'library') {
+      // 如果切换到脚本库模式，清空编辑器
+      document.getElementById('script-editor').placeholder = '请从左侧脚本库选择一个脚本模板';
+    } else {
+      document.getElementById('script-editor').placeholder = '输入要执行的命令或脚本...';
+    }
+  }
+  
+  function selectScript(scriptId) {
+    const script = scriptTemplates[scriptId];
+    if (!script) return;
+    
+    // 切换到脚本库模式
+    setExecutionMode('library');
+    
+    // 更新脚本内容
+    document.getElementById('script-editor').value = script.content;
+    
+    // 高亮选中的脚本
+    document.querySelectorAll('.script-item').forEach(el => el.classList.remove('selected'));
+    event.target.closest('.script-item').classList.add('selected');
+    
+    // 更新结果区域提示
+    document.getElementById('execution-results').textContent = `已选择脚本: ${script.name}\n${script.description}\n\n点击"执行脚本"开始执行...`;
+  }
+  
+  function executeScript() {
+    const scriptContent = document.getElementById('script-editor').value.trim();
+    
+    if (!scriptContent) {
+      alert('请输入要执行的脚本内容！');
+      return;
+    }
+    
+    if (selectedClients.length === 0) {
+      alert('请至少选择一个客户端！');
+      return;
+    }
+    
+    // 清空结果区域
+    const resultsEl = document.getElementById('execution-results');
+    resultsEl.textContent = '开始执行脚本...\n\n';
+    
+    // 将脚本按行分割成命令
+    const commands = scriptContent.split('\n').filter(line => line.trim() && !line.trim().startsWith('#'));
+    
+    // 向每个选中的客户端发送命令
+    selectedClients.forEach(clientId => {
+      resultsEl.textContent += `[客户端 ${clientId}] 开始执行脚本\n`;
+      
+      commands.forEach((command, index) => {
+        setTimeout(() => {
+          socket.emit('send_command', {
+            target: clientId,
+            command: { action: command.split(' ')[0], arg: command.split(' ').slice(1).join(' ') }
+          });
+        }, index * 500); // 每个命令间隔500ms
+      });
+    });
+  }
+  
+  function handleExecutionResult(data) {
+    const resultsEl = document.getElementById('execution-results');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    // 提取客户端ID（如果输出中包含）
+    let clientId = 'unknown';
+    const clientMatch = data.output.match(/^\[(\d+)\]/);
+    if (clientMatch) {
+      clientId = clientMatch[1];
+    } else if (data.target_id) {
+      clientId = data.target_id;
+    }
+    
+    // 清理输出内容
+    let cleanOutput = data.output.replace(/^\[\d+\]\s*/, '');
+    
+    // 添加结果到显示区域
+    const resultLine = `[${timestamp}] [客户端 ${clientId}] ${cleanOutput}\n`;
+    resultsEl.textContent += resultLine;
+    
+    // 自动滚动到底部
+    resultsEl.scrollTop = resultsEl.scrollHeight;
+  }
+  
+  function saveScript() {
+    const scriptContent = document.getElementById('script-editor').value.trim();
+    if (!scriptContent) {
+      alert('请输入脚本内容！');
+      return;
+    }
+    
+    const scriptName = prompt('请输入脚本名称:');
+    if (!scriptName) return;
+    
+    // 这里可以实现保存脚本到服务器的逻辑
+    // 暂时保存到本地存储
+    const savedScripts = JSON.parse(localStorage.getItem('savedScripts') || '{}');
+    savedScripts[scriptName] = {
+      name: scriptName,
+      content: scriptContent,
+      created: new Date().toISOString()
+    };
+    localStorage.setItem('savedScripts', JSON.stringify(savedScripts));
+    
+    alert('脚本保存成功！');
+    loadSavedScripts();
+  }
+  
+  function loadSavedScripts() {
+    const savedScripts = JSON.parse(localStorage.getItem('savedScripts') || '{}');
+    const scriptList = document.getElementById('script-list');
+    
+    // 清空现有的自定义脚本
+    const customScripts = scriptList.querySelectorAll('.script-item.custom');
+    customScripts.forEach(el => el.remove());
+    
+    // 添加保存的脚本
+    Object.entries(savedScripts).forEach(([key, script]) => {
+      const item = document.createElement('div');
+      item.className = 'script-item custom';
+      item.onclick = () => loadSavedScript(key);
+      item.innerHTML = `
+        <div class="script-name">${script.name} <small class="text-muted">(自定义)</small></div>
+        <div class="script-description">创建于: ${new Date(script.created).toLocaleString()}</div>
+      `;
+      scriptList.appendChild(item);
+    });
+  }
+  
+  function loadSavedScript(scriptKey) {
+    const savedScripts = JSON.parse(localStorage.getItem('savedScripts') || '{}');
+    const script = savedScripts[scriptKey];
+    if (script) {
+      document.getElementById('script-editor').value = script.content;
+      setExecutionMode('custom');
+      
+      // 高亮选中的脚本
+      document.querySelectorAll('.script-item').forEach(el => el.classList.remove('selected'));
+      event.target.closest('.script-item').classList.add('selected');
+    }
+  }
+  
+  function clearResults() {
+    document.getElementById('execution-results').textContent = '等待执行脚本...';
+  }
+  
+  // 页面加载时加载保存的脚本
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(loadSavedScripts, 100);
+  });
+</script>
+{% endblock %}

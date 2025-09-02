@@ -1,0 +1,142 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}SFTP 传输 - WebTTY{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sftp-client.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-transfer'></i>
+    <div>
+      <h1>SFTP 传输</h1>
+    </div>
+  </div>
+  <div class="page-actions">
+    <div class="status-indicator">
+      <div class="status-dot" id="connection-indicator"></div>
+      <span class="status-text" id="connection-status">未连接</span>
+    </div>
+  </div>
+</div>
+
+<div class="sftp-container">
+  <!-- 连接配置面板 -->
+  <div class="sftp-connection-panel">
+    <form class="connection-form" id="sftp-form">
+      <div>
+        <label class="form-label">服务器地址</label>
+        <input type="text" id="sftp-host" class="form-control" placeholder="例如: 192.168.1.100" required>
+      </div>
+      <div>
+        <label class="form-label">端口</label>
+        <input type="number" id="sftp-port" class="form-control" value="22" min="1" max="65535">
+      </div>
+      <div>
+        <label class="form-label">用户名</label>
+        <input type="text" id="sftp-username" class="form-control" placeholder="用户名" required>
+      </div>
+      <div>
+        <label class="form-label">密码</label>
+        <input type="password" id="sftp-password" class="form-control" placeholder="密码" required>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary w-100" id="connect-btn" style="position: relative;">
+          <i class='bx bx-plug'></i>
+          连接
+          <button type="button" class="btn btn-danger btn-sm" id="disconnect-btn" style="display: none; position: absolute; right: 0; top: 0; bottom: 0; border-radius: 0 var(--radius-md) var(--radius-md) 0;" onclick="disconnectSFTP()">
+            <i class='bx bx-x'></i>
+          </button>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- SFTP 内容区域 -->
+  <div class="sftp-content">
+    <!-- 远程文件面板 -->
+    <div class="sftp-panel">
+      <div class="panel-header">
+        <i class='bx bx-server'></i>
+        <span>远程文件</span>
+        <div class="ms-auto">
+          <button class="btn btn-light btn-sm" onclick="refreshRemoteFiles()" disabled id="refresh-btn">
+            <i class='bx bx-refresh'></i>
+          </button>
+        </div>
+      </div>
+      <div class="panel-toolbar">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">
+            <i class='bx bx-folder'></i>
+          </span>
+          <input type="text" id="remote-path" class="form-control" placeholder="远程路径" value="." readonly>
+          <button class="btn btn-outline-secondary" onclick="navigateRemote()" disabled id="navigate-btn">
+            <i class='bx bx-right-arrow-alt'></i>
+          </button>
+        </div>
+      </div>
+      <div class="file-list-container">
+        <div id="remote-files" class="file-list">
+          <div class="empty-state">
+            <i class='bx bx-server'></i>
+            <p>请先连接到SFTP服务器</p>
+          </div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <span id="remote-status">未连接</span>
+        <span id="remote-count"></span>
+      </div>
+    </div>
+
+    <!-- 本地文件面板 -->
+    <div class="sftp-panel">
+      <div class="panel-header">
+        <i class='bx bx-desktop'></i>
+        <span>本地文件</span>
+        <div class="ms-auto">
+          <input type="file" id="file-input" multiple style="display: none;" onchange="handleFileSelect()">
+          <button class="btn btn-light btn-sm" onclick="document.getElementById('file-input').click()">
+            <i class='bx bx-plus'></i>
+            选择文件
+          </button>
+        </div>
+      </div>
+      <div class="panel-toolbar">
+        <small class="text-muted">
+          <i class='bx bx-info-circle'></i>
+          选择要上传的本地文件
+        </small>
+      </div>
+      <div class="file-list-container">
+        <div id="local-files" class="file-list">
+          <div class="empty-state">
+            <i class='bx bx-file-plus'></i>
+            <p>点击上方按钮选择要上传的文件</p>
+          </div>
+        </div>
+      </div>
+      <div class="transfer-progress" id="transfer-progress">
+        <div class="d-flex justify-content-between align-items-center">
+          <span id="transfer-status">准备传输...</span>
+          <span id="transfer-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <span id="local-status">等待选择文件</span>
+        <span id="local-count"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sftp-client.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}SSH 终端 - WebTTY{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ssh-terminal.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header compact">
+  <div class="page-title">
+    <i class='bx bx-terminal'></i>
+    <div>
+      <h1>SSH 终端</h1>
+    </div>
+  </div>
+  <div class="page-actions">
+    <div class="status-indicator">
+      <div class="status-dot" id="connection-indicator"></div>
+      <span class="status-text" id="connection-status">未连接</span>
+    </div>
+  </div>
+</div>
+
+<div class="ssh-container">
+  <!-- 连接配置面板 -->
+  <div class="ssh-connection-panel">
+    <form class="connection-form" id="ssh-form">
+      <div>
+        <label class="form-label">服务器地址</label>
+        <input type="text" id="ssh-host" class="form-control" placeholder="例如: 192.168.1.100" required>
+      </div>
+      <div>
+        <label class="form-label">端口</label>
+        <input type="number" id="ssh-port" class="form-control" value="22" min="1" max="65535">
+      </div>
+      <div>
+        <label class="form-label">用户名</label>
+        <input type="text" id="ssh-username" class="form-control" placeholder="用户名" required>
+      </div>
+      <div>
+        <label class="form-label">密码</label>
+        <input type="password" id="ssh-password" class="form-control" placeholder="密码">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary w-100" id="connect-btn" style="position: relative;">
+          <i class='bx bx-plug'></i>
+          连接
+          <button type="button" class="btn btn-danger btn-sm" id="disconnect-btn" style="display: none; position: absolute; right: 0; top: 0; bottom: 0; border-radius: 0 var(--radius-md) var(--radius-md) 0;" onclick="disconnectSSH()">
+            <i class='bx bx-x'></i>
+          </button>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 终端容器 -->
+  <div class="ssh-terminal-container">
+    <div class="terminal-header">
+      <div class="terminal-dots">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+      </div>
+      <div class="terminal-title">SSH 终端</div>
+      <div class="terminal-status">
+        <div class="status-dot" id="terminal-status-dot"></div>
+        <span id="terminal-status-text">等待连接</span>
+      </div>
+    </div>
+    <div id="terminal-wrapper">
+      <!-- xterm.js 终端将在这里初始化 -->
+    </div>
+    <div class="connection-status">
+      <div class="connection-info">
+        <i class='bx bx-info-circle'></i>
+        <span id="status-message">请填写连接信息并点击连接按钮</span>
+      </div>
+      <div id="connection-details" style="display: none;">
+        <small class="text-muted">
+          <i class='bx bx-server'></i>
+          <span id="current-connection"></span>
+        </small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script src="{{ url_for('static', filename='js/ssh-terminal.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,136 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}命令查询 - WebTTY{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <i class='bx bx-command'></i>
+    <div>
+      <h1>命令查询</h1>
+      <p class="page-subtitle">查找常用的系统命令和用法示例</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <i class='bx bx-search'></i>
+    命令搜索
+  </div>
+  <div class="card-body">
+    <div class="mb-4">
+      <input type="text" id="searchInput" class="form-control form-control-lg" 
+             placeholder="输入关键词搜索命令..." onkeyup="searchCommands()">
+    </div>
+
+    <ul class="nav nav-pills nav-fill mb-4" id="osTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="windows-tab" data-bs-toggle="pill" 
+                data-bs-target="#windows" type="button" role="tab">
+          <i class='bx bxl-windows'></i>
+          Windows 命令
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="linux-tab" data-bs-toggle="pill" 
+                data-bs-target="#linux" type="button" role="tab">
+          <i class='bx bxl-tux'></i>
+          Linux 命令
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="osTabsContent">
+      <div class="tab-pane fade show active" id="windows" role="tabpanel">
+        <div id="windowsCommands" class="row g-3">
+          <!-- Windows命令将通过JavaScript动态加载 -->
+        </div>
+      </div>
+      <div class="tab-pane fade" id="linux" role="tabpanel">
+        <div id="linuxCommands" class="row g-3">
+          <!-- Linux命令将通过JavaScript动态加载 -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let windowsCommands = [];
+let linuxCommands = [];
+
+// 从 JSON 文件加载命令
+async function loadCommands() {
+  const winRes = await fetch("/static/data/windows_commands.json");
+  windowsCommands = await winRes.json();
+
+  const linuxRes = await fetch("/static/data/linux_commands.json");
+  linuxCommands = await linuxRes.json();
+
+  renderCommands(windowsCommands, 'windowsCommands');
+  renderCommands(linuxCommands, 'linuxCommands');
+}
+
+// 渲染命令列表
+function renderCommands(commands, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = commands.map(cmd => `
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 command-item">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-3">
+            <i class='bx ${cmd.icon} text-primary me-2' style="font-size: 1.5rem;"></i>
+            <div>
+              <h6 class="card-title mb-0 text-primary fw-bold">${cmd.name}</h6>
+              <small class="text-muted">${cmd.category}</small>
+            </div>
+          </div>
+          <p class="card-text text-secondary mb-3">${cmd.description}</p>
+          <div class="bg-light p-2 rounded">
+            <code class="text-dark">${cmd.example}</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// 搜索命令
+function searchCommands() {
+  const searchText = document.getElementById('searchInput').value.toLowerCase();
+  const activeTab = document.querySelector('.nav-link.active').id;
+
+  if (activeTab === 'windows-tab') {
+    const filtered = windowsCommands.filter(cmd =>
+      cmd.name.toLowerCase().includes(searchText) ||
+      cmd.description.toLowerCase().includes(searchText) ||
+      cmd.category.toLowerCase().includes(searchText)
+    );
+    renderCommands(filtered, 'windowsCommands');
+  } else {
+    const filtered = linuxCommands.filter(cmd =>
+      cmd.name.toLowerCase().includes(searchText) ||
+      cmd.description.toLowerCase().includes(searchText) ||
+      cmd.category.toLowerCase().includes(searchText)
+    );
+    renderCommands(filtered, 'linuxCommands');
+  }
+}
+
+// 初始化页面
+document.addEventListener('DOMContentLoaded', function() {
+  loadCommands();
+
+  document.getElementById('windows-tab').addEventListener('click', () => {
+    setTimeout(searchCommands, 100);
+  });
+  document.getElementById('linux-tab').addEventListener('click', () => {
+    setTimeout(searchCommands, 100);
+  });
+});
+</script>
+
+{% endblock %}
