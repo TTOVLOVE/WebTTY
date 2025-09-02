@@ -287,7 +287,7 @@ python run_app.py
 ### 调试模式
 ```bash
 export FLASK_ENV=dev
-python run_app.py
+python run.py
 ```
 
 ### 日志查看
