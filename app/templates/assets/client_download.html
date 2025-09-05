@@ -1,0 +1,110 @@
+{% extends "dashboard/base.html" %}
+{% block title %}客户端下载 - WebTTY{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <i class='bx bx-download'></i>
+    <div>
+      <h1>客户端下载</h1>
+      <p class="page-subtitle">选择平台与架构，生成可执行客户端或打包文件</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form id="builder-form" class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">平台</label>
+        <select class="form-select" name="platform" id="platform" required>
+          <option value="windows">Windows</option>
+          <option value="linux">Linux</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">处理器架构</label>
+        <select class="form-select" name="arch" id="arch" required>
+          <option value="x64">x64 / amd64</option>
+          <option value="arm64">ARM64</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">服务器 IP</label>
+        <input type="text" class="form-control" name="server_ip" id="server_ip" placeholder="例如 192.168.1.10" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">服务器端口</label>
+        <input type="number" class="form-control" name="server_port" id="server_port" value="2383" required>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary">
+          <i class='bx bx-cog'></i> 生成并下载
+        </button>
+        <span class="text-muted ms-2" id="build-hint">优先尝试本机打包可执行文件（同平台），否则返回ZIP源码包</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="build-log" class="mt-3" style="display:none;">
+  <div class="card">
+    <div class="card-body">
+      <pre id="build-log-pre" style="white-space:pre-wrap; font-family:monospace; margin:0;">正在构建...</pre>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.getElementById('builder-form').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const form = e.target;
+    const payload = {
+      platform: form.platform.value,
+      arch: form.arch.value,
+      server_ip: form.server_ip.value,
+      server_port: form.server_port.value
+    };
+
+    const logBox = document.getElementById('build-log');
+    const logPre = document.getElementById('build-log-pre');
+    logBox.style.display = 'block';
+    logPre.textContent = '正在提交构建请求...';
+
+    try {
+      const res = await fetch("{{ url_for('assets.client_download_build') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        logPre.textContent = '构建失败: ' + errText;
+        return;
+      }
+
+      // 如果返回的是文件，触发下载
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+      const filename = filenameMatch ? filenameMatch[1] : 'client_package.bin';
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      logPre.textContent = '构建完成，已开始下载: ' + filename;
+    } catch (err) {
+      logPre.textContent = '请求失败: ' + err.message;
+    }
+  });
+</script>
+{% endblock %}
+

@@ -55,7 +55,7 @@ app/
 ├── config.py                # 配置文件
 ├── extensions.py            # 扩展初始化
 ├── models.py                # 数据模型
-├── run_app.py               # 应用启动入口（推荐使用）
+├── run.py                   # 应用启动入口（推荐使用）
 ├── web/                     # Web相关模块
 │   ├── routes/              # 路由蓝图
 │   │   ├── auth.py          # 认证路由
@@ -127,7 +127,7 @@ export SOCKETIO_PORT=5000
 
 4. **运行应用**
 ```bash
-python run_app.py
+python run.py
 ```
 
 ### 默认配置

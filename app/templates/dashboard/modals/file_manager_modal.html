@@ -1,0 +1,436 @@
+<div class="modal-overlay" id="fileManagerModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">文件管理器 - 客户端 <span id="fm-client-id"></span></h3>
+      <button class="modal-close" onclick="closeFileManagerModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="file-manager-container modal-version">
+        <!-- 工具栏 -->
+        <div class="file-manager-toolbar">
+          <div class="toolbar-row">
+            <div class="path-section">
+              <div class="input-group">
+                <span class="input-group-text"><i class='bx bx-folder'></i></span>
+                <input type="text" id="fm-path" class="form-control" placeholder="输入路径或留空使用当前目录" value=".">
+                <button id="fm-btn-list" class="btn btn-primary">
+                  <i class='bx bx-list-ul'></i> 列出
+                </button>
+                <button id="fm-btn-up" class="btn btn-secondary">
+                  <i class='bx bx-up-arrow-alt'></i> 上级
+                </button>
+              </div>
+            </div>
+            <div class="upload-section">
+              <div class="upload-area">
+                <input type="file" id="fm-upload-input" class="form-control">
+                <button id="fm-btn-upload" class="btn btn-success">
+                  <i class='bx bx-upload'></i> 上传
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="upload-progress" id="fm-upload-progress">
+            <div class="progress-info">
+              <span>上传进度</span>
+              <span id="fm-upload-percent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="upload-progress-bar" id="fm-upload-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 主要内容区域 -->
+        <div class="file-manager-content">
+          <!-- 文件列表面板 -->
+          <div class="file-list-panel">
+            <div class="panel-header">
+              <i class='bx bx-folder-open'></i> 
+              <span>文件列表</span>
+            </div>
+            <div class="file-table-container">
+              <table class="file-table" id="fm-files-tbl">
+                <thead>
+                  <tr>
+                    <th><i class='bx bx-file'></i> 名称</th>
+                    <th><i class='bx bx-category'></i> 类型</th>
+                    <th><i class='bx bx-data'></i> 大小</th>
+                    <th><i class='bx bx-time'></i> 修改时间</th>
+                    <th><i class='bx bx-cog'></i> 操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="5" class="empty-message">
+                      <i class='bx bx-info-circle'></i> 等待操作...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="status-bar">
+              <div id="fm-status"><i class='bx bx-info-circle'></i> 准备就绪</div>
+            </div>
+          </div>
+
+          <!-- 文件内容面板 -->
+          <div class="file-content-panel">
+            <div class="panel-header">
+              <i class='bx bx-file-blank'></i> 
+              <span>文件内容 / 输出</span>
+            </div>
+            <div class="file-content">
+              <pre id="fm-file-text">请选择文件进行操作。</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* 文件管理器模态框专用样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  display: none;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  display: flex !important;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+  width: 90vw;
+  max-width: 1200px;
+  height: 80vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-overlay.active .modal-content {
+  transform: scale(1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--light-bg);
+  flex-shrink: 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-manager-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-manager-toolbar {
+  padding: 1rem;
+  background: var(--light-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.toolbar-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+.path-section .input-group {
+  display: flex;
+  gap: 0;
+}
+
+.path-section .input-group .form-control {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  border-right: none;
+}
+
+.path-section .input-group .btn {
+  border-radius: 0;
+  border-left: none;
+}
+
+.path-section .input-group .btn:last-child {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.upload-area {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.upload-progress {
+  margin-top: 1rem;
+  display: none;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  background: var(--success-color);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.file-manager-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-list-panel,
+.file-content-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border-color);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.file-content-panel {
+  border-right: none;
+}
+
+.panel-header {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+  color: white;
+  padding: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.file-table-container {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.file-table th,
+.file-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-table th {
+  background: var(--light-bg);
+  font-weight: 600;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.file-table tbody tr:hover {
+  background: var(--light-bg);
+}
+
+.file-table .empty-message {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.file-actions .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.file-content {
+  flex: 1;
+  padding: 1rem;
+  overflow: auto;
+  min-height: 0;
+  max-height: none;
+  min-width: 0; /* 关键：允许内部pre产生水平滚动而不挤压布局 */
+}
+
+.file-content pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre;
+  margin: 0;
+  min-height: 100%;
+  overflow: auto;
+}
+
+.status-bar {
+  padding: 0.75rem;
+  background: var(--light-bg);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-info-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-info-cell i {
+  font-size: 1.25rem;
+  width: 1.5rem;
+  text-align: center;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95vw;
+    height: 90vh;
+    margin: 1rem;
+  }
+  
+  .file-manager-content {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr;
+  }
+  
+  .toolbar-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  
+  .file-table th,
+  .file-table td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  .file-actions .btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* 滚动条样式 */
+.file-table-container::-webkit-scrollbar,
+.file-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.file-table-container::-webkit-scrollbar-track,
+.file-content::-webkit-scrollbar-track {
+  background: var(--light-bg);
+  border-radius: 4px;
+}
+
+.file-table-container::-webkit-scrollbar-thumb,
+.file-content::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+
+.file-table-container::-webkit-scrollbar-thumb:hover,
+.file-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+</style>

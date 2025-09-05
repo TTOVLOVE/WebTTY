@@ -1,0 +1,245 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}工具箱 - WebTTY{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/toolbox.css') }}">
+{% endblock %}
+
+{% block content %}
+
+
+<div class="toolbox-container">
+  <!-- 左侧连接列表 -->
+  <div class="connections-sidebar">
+    <div class="sidebar-header">
+      <h3 class="sidebar-title">
+        <i class='bx bx-link'></i>
+        连接管理
+      </h3>
+      <div class="sidebar-actions">
+        <button class="btn btn-sm btn-outline" onclick="showConnectionModal()">
+          <i class='bx bx-plus'></i>
+          新建
+        </button>
+        <button class="btn btn-sm btn-outline" onclick="refreshConnections()">
+          <i class='bx bx-refresh'></i>
+          刷新
+        </button>
+      </div>
+    </div>
+    
+    <div class="connections-list" id="connectionsList">
+      <!-- 连接列表将通过JavaScript动态生成 -->
+    </div>
+  </div>
+
+  <!-- 右侧内容区域 -->
+  <div class="content-area">
+    <div class="content-header" id="contentHeader">
+      <h2 class="content-title">
+        <i class='bx bx-home'></i>
+        欢迎使用工具箱
+      </h2>
+      <p class="content-subtitle">选择左侧连接或使用下方工具开始工作</p>
+    </div>
+    
+    <div class="content-body" id="contentBody">
+      <!-- 欢迎页面 -->
+      <div class="welcome-content" id="welcomeContent">
+        <div class="welcome-icon">
+          <i class='bx bx-wrench'></i>
+        </div>
+        <h3 class="welcome-title">远程连接工具箱</h3>
+        <p class="welcome-description">
+          这是一个功能强大的远程连接管理工具，支持SSH、SFTP、VNC、RDP等多种协议。
+          您可以快速创建和管理连接，实现远程访问和控制。
+        </p>
+        
+        <div class="quick-actions">
+          <button class="btn btn-primary" onclick="showConnectionModal('ssh')">
+            <i class='bx bx-terminal'></i>
+            创建SSH连接
+          </button>
+          <button class="btn btn-primary" onclick="showConnectionModal('vnc')">
+            <i class='bx bx-desktop'></i>
+            创建VNC连接
+          </button>
+          <button class="btn btn-primary" onclick="showConnectionModal('rdp')">
+            <i class='bx bx-laptop'></i>
+            创建RDP连接
+          </button>
+        </div>
+        
+        <div class="tools-grid">
+          <div class="tool-card" onclick="showConnectionModal('ssh')">
+            <div class="tool-icon">
+              <i class='bx bx-terminal'></i>
+            </div>
+            <div class="tool-name">SSH终端</div>
+            <div class="tool-description">安全Shell连接，支持命令执行</div>
+          </div>
+          
+          <div class="tool-card" onclick="showConnectionModal('sftp')">
+            <div class="tool-icon">
+              <i class='bx bx-transfer'></i>
+            </div>
+            <div class="tool-name">SFTP传输</div>
+            <div class="tool-description">安全文件传输协议</div>
+          </div>
+          
+          <div class="tool-card" onclick="showConnectionModal('vnc')">
+            <div class="tool-icon">
+              <i class='bx bx-desktop'></i>
+            </div>
+            <div class="tool-name">VNC桌面</div>
+            <div class="tool-description">虚拟网络计算远程桌面</div>
+          </div>
+          
+          <div class="tool-card" onclick="showConnectionModal('rdp')">
+            <div class="tool-icon">
+              <i class='bx bx-laptop'></i>
+            </div>
+            <div class="tool-name">RDP桌面</div>
+            <div class="tool-description">Windows远程桌面协议</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 连接详情页面 -->
+      <div id="connectionDetail" style="display: none;">
+        <!-- 连接详情将通过JavaScript动态生成 -->
+      </div>
+      
+      <!-- 终端窗口 -->
+      <div id="terminalWindow" class="terminal-window" style="display: none;">
+        <div class="terminal-header">
+          <div class="terminal-title" id="terminalTitle">SSH终端</div>
+          <div class="terminal-controls">
+            <button class="terminal-btn minimize"></button>
+            <button class="terminal-btn maximize"></button>
+            <button class="terminal-btn close" onclick="closeTerminal()"></button>
+          </div>
+        </div>
+        <div class="terminal-body">
+          <div id="terminal" style="height: 100%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 连接配置弹窗 -->
+<div class="modal-overlay" id="connectionModal" style="display: none;">
+  <div class="modal-content connection-modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modalTitle">创建新连接</h3>
+      <button class="modal-close" onclick="hideConnectionModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <p class="modal-subtitle" id="modalSubtitle">填写连接信息以创建新的远程连接</p>
+      
+      <form id="connectionForm">
+        <div class="form-section basic-info">
+          <h4 class="section-title">
+            <i class='bx bx-info-circle'></i>
+            基本信息
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">连接名称</label>
+              <input type="text" class="form-control" id="connectionName" required placeholder="例如：我的服务器">
+            </div>
+            <div class="form-group">
+              <label class="form-label">连接类型</label>
+              <select class="form-control" id="connectionType" required>
+                <option value="">选择连接类型</option>
+                <option value="ssh">SSH终端</option>
+                <option value="sftp">SFTP传输</option>
+                <option value="vnc">VNC桌面</option>
+                <option value="rdp">RDP桌面</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-section server-info">
+          <h4 class="section-title">
+            <i class='bx bx-server'></i>
+            服务器信息
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">主机地址</label>
+              <input type="text" class="form-control" id="connectionHost" required placeholder="例如：192.168.1.100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">端口</label>
+              <input type="number" class="form-control" id="connectionPort" required placeholder="22">
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input type="text" class="form-control" id="connectionUsername" placeholder="用户名（可选）">
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input type="password" class="form-control" id="connectionPassword" placeholder="密码（可选）">
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-section advanced-options" style="display: none;">
+          <h4 class="section-title">
+            <i class='bx bx-cog'></i>
+            高级选项
+          </h4>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">连接超时 (秒)</label>
+              <input type="number" class="form-control" id="connectionTimeout" value="30" min="5" max="300">
+            </div>
+            <div class="form-group">
+              <label class="form-label">编码</label>
+              <select class="form-control" id="connectionEncoding">
+                <option value="utf-8">UTF-8</option>
+                <option value="gbk">GBK</option>
+                <option value="ascii">ASCII</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">
+              <input type="checkbox" id="connectionKeepAlive" checked>
+              保持连接活跃
+            </label>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline-secondary" onclick="toggleAdvancedOptions()">
+            <i class='bx bx-cog'></i> 高级选项
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="hideConnectionModal()">取消</button>
+          <button type="submit" class="btn btn-primary">创建连接</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script src="{{ url_for('static', filename='js/toolbox-new.js') }}"></script>
+{% endblock %}
