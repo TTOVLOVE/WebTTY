@@ -151,9 +151,12 @@ function updateClientList(clients) {
                         <button class="btn btn-info btn-sm me-2" onclick="openFileManagerModal('${clientId}')">
                             <i class='bx bx-folder'></i> 文件管理
                         </button>
-                        <button class="btn btn-success btn-sm" onclick="takeScreenshot('${clientId}')">
+                        <button class="btn btn-success btn-sm me-2" onclick="takeScreenshot('${clientId}')">
                             <i class='bx bx-camera'></i> 截图
                         </button>
+                        <a href="{{ url_for('dashboard.remote_control') }}?client=${clientId}" class="btn btn-warning btn-sm">
+                            <i class='bx bx-mobile-alt'></i> 远程控制
+                        </a>
                     </div>
                 </div>
             </div>

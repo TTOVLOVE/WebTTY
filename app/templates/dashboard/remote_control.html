@@ -1,0 +1,204 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}远程控制 - {{ client_id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <i class='bx bx-mobile-alt'></i>
+    <div>
+      <h1>远程控制</h1>
+      <p class="page-subtitle">正在实时监控客户端: <strong>{{ client_id }}</strong></p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0" style="background-color: #000; text-align: center;">
+    <img id="screen-viewer" src="" alt="Client Screen" style="max-width: 100%; max-height: 70vh; object-fit: contain;" tabindex="0">
+  </div>
+  <div class="card-footer">
+    <p id="status-text" class="text-muted mb-0">正在等待屏幕画面...</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const clientId = "{{ client_id }}";
+  const screenViewer = document.getElementById('screen-viewer');
+  const statusText = document.getElementById('status-text');
+  let frameCount = 0;
+  let lastUpdateTime = Date.now();
+  // 帧元数据（用于坐标映射）
+  let lastMeta = { w: null, h: null, vx: 0, vy: 0, vw: null, vh: null };
+  // 控制开关（默认开启），点击图像以聚焦后可键鼠控制
+  let controlEnabled = true;
+
+  const socket = io();
+
+  socket.on('connect', () => {
+    console.log('已连接到服务器');
+    statusText.textContent = '已连接到服务器，等待画面...';
+    // 页面连接后自动请求客户端开始屏幕流（适当提高帧率，降低质量提升流畅度）
+    socket.emit('send_command', {
+      target: clientId,
+      command: { action: 'start_screen', arg: 'fps=15,quality=50,width=1024' }
+    });
+  });
+
+  socket.on('screen_frame_update', (data) => {
+    if (data.client_id === clientId) {
+      screenViewer.src = `data:image/jpeg;base64,${data.data}`;
+      // 更新元信息（用于坐标映射）
+      if (typeof data.w === 'number' && typeof data.h === 'number') {
+        lastMeta.w = data.w; lastMeta.h = data.h;
+      }
+      if (typeof data.vx === 'number' && typeof data.vy === 'number' && typeof data.vw === 'number' && typeof data.vh === 'number') {
+        lastMeta.vx = data.vx; lastMeta.vy = data.vy; lastMeta.vw = data.vw; lastMeta.vh = data.vh;
+      }
+      // 更新状态文本以显示帧率
+      frameCount++;
+      const now = Date.now();
+      const elapsed = (now - lastUpdateTime) / 1000;
+      if (elapsed >= 1) {
+        const fps = (frameCount / elapsed).toFixed(1);
+        statusText.textContent = `正在接收画面... (FPS: ${fps})`;
+        frameCount = 0;
+        lastUpdateTime = now;
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    statusText.textContent = '与服务器的连接已断开。';
+  });
+
+  // 页面关闭/刷新时请求停止屏幕流
+  window.addEventListener('beforeunload', () => {
+    try {
+      socket.emit('send_command', {
+        target: clientId,
+        command: { action: 'stop_screen', arg: '' }
+      });
+    } catch (e) {
+      // 忽略
+    }
+  });
+
+  // ========== 输入采集与坐标映射 ==========
+  // 计算 img 内容区（考虑 object-fit: contain 带来的留边）
+  function getImageContentBox(img) {
+    const rect = img.getBoundingClientRect();
+    const naturalW = img.naturalWidth || lastMeta.w || 1;
+    const naturalH = img.naturalHeight || lastMeta.h || 1;
+    const containerW = rect.width;
+    const containerH = rect.height;
+    const containerRatio = containerW / containerH;
+    const naturalRatio = naturalW / naturalH;
+    let displayW, displayH, offsetX = 0, offsetY = 0;
+    if (containerRatio > naturalRatio) {
+      displayH = containerH;
+      displayW = displayH * naturalRatio;
+      offsetX = (containerW - displayW) / 2;
+    } else {
+      displayW = containerW;
+      displayH = displayW / naturalRatio;
+      offsetY = (containerH - displayH) / 2;
+    }
+    return { left: rect.left + offsetX, top: rect.top + offsetY, width: displayW, height: displayH };
+  }
+
+  function mapPointToClient(x, y) {
+    // x, y 为视口坐标（clientX, clientY）
+    const box = getImageContentBox(screenViewer);
+    const px = Math.max(0, Math.min(1, (x - box.left) / (box.width || 1)));
+    const py = Math.max(0, Math.min(1, (y - box.top) / (box.height || 1)));
+    // 将归一化坐标映射至虚拟屏坐标
+    const vw = lastMeta.vw || lastMeta.w || 0;
+    const vh = lastMeta.vh || lastMeta.h || 0;
+    const vx = lastMeta.vx || 0;
+    const vy = lastMeta.vy || 0;
+    const absX = Math.round(vx + px * vw);
+    const absY = Math.round(vy + py * vh);
+    return { x: absX, y: absY };
+  }
+
+  function sendCommand(action, arg) {
+    socket.emit('send_command', { target: clientId, command: { action, arg } });
+  }
+
+  // 鼠标事件
+  let isMouseDown = false;
+  let lastMoveSent = 0;
+
+  screenViewer.addEventListener('mousedown', (e) => {
+    if (!controlEnabled) return;
+    screenViewer.focus();
+    isMouseDown = true;
+    const { x, y } = mapPointToClient(e.clientX, e.clientY);
+    const btn = e.button === 2 ? 'right' : (e.button === 1 ? 'middle' : 'left');
+    sendCommand('mouse', `move ${x} ${y}`);
+    sendCommand('mouse', `down ${btn}`);
+    e.preventDefault();
+  });
+  screenViewer.addEventListener('mouseup', (e) => {
+    if (!controlEnabled) return;
+    isMouseDown = false;
+    const { x, y } = mapPointToClient(e.clientX, e.clientY);
+    const btn = e.button === 2 ? 'right' : (e.button === 1 ? 'middle' : 'left');
+    sendCommand('mouse', `move ${x} ${y}`);
+    sendCommand('mouse', `up ${btn}`);
+    e.preventDefault();
+  });
+  screenViewer.addEventListener('mousemove', (e) => {
+    if (!controlEnabled) return;
+    const now = performance.now();
+    if (now - lastMoveSent < 16 && !isMouseDown) return; // 节流 ~60Hz（按下时放宽）
+    lastMoveSent = now;
+    const { x, y } = mapPointToClient(e.clientX, e.clientY);
+    sendCommand('mouse', `move ${x} ${y}`);
+    e.preventDefault();
+  });
+  screenViewer.addEventListener('contextmenu', (e) => {
+    if (!controlEnabled) return;
+    e.preventDefault();
+  });
+  screenViewer.addEventListener('wheel', (e) => {
+    if (!controlEnabled) return;
+    const deltaY = Math.max(-1, Math.min(1, e.deltaY)) * 120; // 归一到 ±120
+    sendCommand('mouse', `wheel ${Math.trunc(deltaY)}`);
+    e.preventDefault();
+  }, { passive: false });
+
+  // 键盘事件（聚焦在 screenViewer 上时生效）
+  function normalizeKey(key) {
+    // 直接使用浏览器的 key 值，客户端已有常见键名与 VK_* 回退映射
+    // 将空格显示名统一为 'Space'
+    if (key === ' ') return 'Space';
+    return key;
+  }
+  screenViewer.addEventListener('keydown', (e) => {
+    if (!controlEnabled) return;
+    const k = normalizeKey(e.key);
+    sendCommand('key', `down ${k}`);
+    // 阻止本地快捷键干扰
+    e.preventDefault();
+  });
+  screenViewer.addEventListener('keyup', (e) => {
+    if (!controlEnabled) return;
+    const k = normalizeKey(e.key);
+    sendCommand('key', `up ${k}`);
+    e.preventDefault();
+  });
+
+  // 单击图像切换焦点和控制开关（双击可切换开/关）
+  screenViewer.addEventListener('dblclick', () => {
+    controlEnabled = !controlEnabled;
+    const onoff = controlEnabled ? '已开启控制' : '已关闭控制';
+    statusText.textContent = `远程控制 ${onoff}`;
+    if (controlEnabled) screenViewer.focus();
+  });
+</script>
+{% endblock %}
+

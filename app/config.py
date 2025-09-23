@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 class BaseConfig:
     SECRET_KEY = os.getenv("SECRET_KEY", "ratauthmoonbeaut")
@@ -6,6 +7,18 @@ class BaseConfig:
     UPLOAD_TEMP_DIR = os.getenv("UPLOAD_TEMP_DIR", "uploads_temp")
     RAT_PORT = int(os.getenv("RAT_PORT", 2383))
     SOCKETIO_PORT = int(os.getenv("SOCKETIO_PORT", 5000))
+
+    # 数据库配置
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///app.db")
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    DATABASE_PATH = os.getenv("DATABASE_PATH", "app.db")
+    
+    # 会话配置
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
+    
+    # 安全配置
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_SECRET_KEY = os.getenv("WTF_CSRF_SECRET_KEY", "csrf_secret_key")
 
     VNC_WEBSOCKIFY_BIN = os.getenv("VNC_WEBSOCKIFY_BIN", "websockify")   # 系统可执行：pip install websockify 后为 'websockify'
     VNC_WEBSOCKIFY_HOST = os.getenv("VNC_WEBSOCKIFY_HOST", "0.0.0.0")

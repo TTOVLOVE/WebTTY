@@ -41,6 +41,13 @@ def get_clients():
     clients = {cid: info for cid, info in client_manager.client_info.items()}
     return jsonify({'clients': clients})
 
+@dashboard_bp.route('/remote_control')
+@login_required
+def remote_control():
+    """远程控制页面"""
+    client_id = request.args.get('client', '')
+    return render_template('dashboard/remote_control.html', client_id=client_id)
+
 @dashboard_bp.route('/test')
 def test():
     """测试页面，不需要登录"""

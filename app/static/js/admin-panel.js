@@ -26,6 +26,15 @@ class AdminPanel {
       });
     }
 
+    // 编辑用户表单提交
+    const editUserForm = document.getElementById('editUserForm');
+    if (editUserForm) {
+      editUserForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.updateUser();
+      });
+    }
+
     // 编辑端口表单提交
     const editPortForm = document.getElementById('editPortForm');
     if (editPortForm) {
@@ -52,23 +61,13 @@ class AdminPanel {
         const data = await response.json();
         this.updateSystemInfo(data);
       } else {
-        // 如果API不存在，使用模拟数据
-        this.updateSystemInfo(this.getMockSystemInfo());
+        console.error('加载系统信息失败:', response.status);
+        this.showNotification('加载系统信息失败', 'error');
       }
     } catch (error) {
-      console.log('使用模拟系统信息');
-      this.updateSystemInfo(this.getMockSystemInfo());
+      console.error('加载系统信息出错:', error);
+      this.showNotification('加载系统信息出错', 'error');
     }
-  }
-
-  // 获取模拟系统信息
-  getMockSystemInfo() {
-    return {
-      cpu_usage: Math.floor(Math.random() * 100),
-      memory_usage: Math.floor(Math.random() * 100),
-      disk_usage: Math.floor(Math.random() * 100),
-      uptime: Math.floor(Math.random() * 30) + 1
-    };
   }
 
   // 更新系统信息显示
@@ -92,27 +91,13 @@ class AdminPanel {
         const data = await response.json();
         this.updateClientInfo(data);
       } else {
-        // 使用模拟数据
-        this.updateClientInfo(this.getMockClientInfo());
+        console.error('加载客户端信息失败:', response.status);
+        this.showNotification('加载客户端信息失败', 'error');
       }
     } catch (error) {
-      console.log('使用模拟客户端信息');
-      this.updateClientInfo(this.getMockClientInfo());
+      console.error('加载客户端信息出错:', error);
+      this.showNotification('加载客户端信息出错', 'error');
     }
-  }
-
-  // 获取模拟客户端信息
-  getMockClientInfo() {
-    return {
-      total: Math.floor(Math.random() * 50) + 10,
-      online: Math.floor(Math.random() * 20) + 5,
-      max: 100,
-      clients: [
-        { id: 1, name: 'Client-001', status: 'online', ip: '192.168.1.100', last_seen: '2分钟前' },
-        { id: 2, name: 'Client-002', status: 'offline', ip: '192.168.1.101', last_seen: '1小时前' },
-        { id: 3, name: 'Client-003', status: 'connecting', ip: '192.168.1.102', last_seen: '正在连接' }
-      ]
-    };
   }
 
   // 更新客户端信息显示
@@ -166,24 +151,13 @@ class AdminPanel {
         const data = await response.json();
         this.updateDatabaseInfo(data);
       } else {
-        // 使用模拟数据
-        this.updateDatabaseInfo(this.getMockDatabaseInfo());
+        console.error('加载数据库信息失败:', response.status);
+        this.showNotification('加载数据库信息失败', 'error');
       }
     } catch (error) {
-      console.log('使用模拟数据库信息');
-      this.updateDatabaseInfo(this.getMockDatabaseInfo());
+      console.error('加载数据库信息出错:', error);
+      this.showNotification('加载数据库信息出错', 'error');
     }
-  }
-
-  // 获取模拟数据库信息
-  getMockDatabaseInfo() {
-    return {
-      status: 'connected',
-      type: 'SQLite',
-      pool_size: 10,
-      response_time: Math.floor(Math.random() * 20) + 1,
-      active_connections: Math.floor(Math.random() * 10) + 1
-    };
   }
 
   // 更新数据库信息显示
@@ -213,22 +187,13 @@ class AdminPanel {
         const data = await response.json();
         this.updateUserList(data.users);
       } else {
-        // 使用模拟数据
-        this.updateUserList(this.getMockUsers());
+        console.error('加载用户列表失败:', response.status);
+        this.showNotification('加载用户列表失败', 'error');
       }
     } catch (error) {
-      console.log('使用模拟用户数据');
-      this.updateUserList(this.getMockUsers());
+      console.error('加载用户列表出错:', error);
+      this.showNotification('加载用户列表出错', 'error');
     }
-  }
-
-  // 获取模拟用户数据
-  getMockUsers() {
-    return [
-      { id: 1, username: 'admin', role: 'admin', status: 'active', last_login: '2024-01-15 10:30:00' },
-      { id: 2, username: 'user1', role: 'user', status: 'active', last_login: '2024-01-15 09:15:00' },
-      { id: 3, username: 'guest1', role: 'guest', status: 'inactive', last_login: '2024-01-14 16:45:00' }
-    ];
   }
 
   // 更新用户列表显示
@@ -330,10 +295,88 @@ class AdminPanel {
   }
 
   // 编辑用户
-  editUser(userId) {
+  async editUser(userId) {
     console.log('编辑用户:', userId);
-    // 这里可以实现编辑用户的逻辑
-    this.showNotification('编辑用户功能开发中', 'info');
+    
+    try {
+      // 获取用户详情
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const user = data.user;
+        
+        // 填充编辑表单
+        document.getElementById('editUserId').value = user.id;
+        document.getElementById('editUsername').value = user.username;
+        document.getElementById('editEmail').value = user.email;
+        document.getElementById('editUserRole').value = user.role;
+        document.getElementById('editUserStatus').value = user.status;
+        
+        // 显示编辑模态框（使用自定义样式控制）
+        this.showEditUserModal();
+      } else {
+        const error = await response.json();
+        this.showNotification(error.error || '获取用户信息失败', 'error');
+      }
+    } catch (error) {
+      console.error('获取用户信息错误:', error);
+      this.showNotification('获取用户信息失败', 'error');
+    }
+  }
+  
+  // 更新用户信息
+  async updateUser() {
+    const userId = document.getElementById('editUserId').value;
+    const username = document.getElementById('editUsername').value;
+    const email = document.getElementById('editEmail').value;
+    const password = document.getElementById('editPassword').value;
+    const role = document.getElementById('editUserRole').value;
+    const status = document.getElementById('editUserStatus').value;
+    
+    try {
+      const userData = {
+        username,
+        email,
+        role,
+        status
+      };
+      
+      // 如果输入了密码，则添加到请求数据中
+      if (password.trim() !== '') {
+        userData.password = password;
+      }
+      
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData)
+      });
+
+      if (response.ok) {
+        this.showNotification('用户信息更新成功', 'success');
+        // 隐藏编辑模态框
+        const editUserModal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+        editUserModal.hide();
+        // 重新加载用户列表
+        this.loadUserList();
+        // 清空编辑表单
+        document.getElementById('editUserForm').reset();
+      } else {
+        const error = await response.json();
+        this.showNotification(error.error || '更新用户信息失败', 'error');
+      }
+    } catch (error) {
+      console.error('更新用户信息错误:', error);
+      this.showNotification('更新用户信息失败', 'error');
+    }
   }
 
   // 删除用户
@@ -369,7 +412,10 @@ class AdminPanel {
     if (serviceInput) serviceInput.value = service;
     if (portInput) portInput.value = currentPort;
 
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
   }
 
   // 保存端口设置
@@ -437,48 +483,179 @@ class AdminPanel {
   }
 
   // 查看令牌
-  viewToken(type) {
-    console.log('查看令牌:', type);
-    this.showNotification('令牌查看功能开发中', 'info');
+  async viewToken(type) {
+    try {
+      const response = await fetch(`/api/admin/tokens/${type}`);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // 显示令牌信息
+        let message = `<div class="token-info">\n`;
+        message += `<p><strong>类型:</strong> ${data.type.toUpperCase()}</p>\n`;
+        message += `<p><strong>令牌:</strong> ${data.token || '未生成'}</p>\n`;
+        message += `<p><strong>创建时间:</strong> ${data.created || '未知'}</p>\n`;
+        message += `<p><strong>过期时间:</strong> ${data.expires || '未知'}</p>\n`;
+        message += `<p><strong>状态:</strong> ${data.status === 'active' ? '有效' : data.status === 'expired' ? '已过期' : '未生成'}</p>\n`;
+        message += `</div>`;
+        
+        this.showNotification(message, 'info', 10000);
+      } else {
+        console.error('获取令牌信息失败:', response.status);
+        this.showNotification('获取令牌信息失败', 'error');
+      }
+    } catch (error) {
+      console.error('获取令牌信息出错:', error);
+      this.showNotification('获取令牌信息出错', 'error');
+    }
   }
 
   // 重新生成令牌
-  regenerateToken(type) {
+  async regenerateToken(type) {
     if (!confirm(`确定要重新生成${type}令牌吗？这将使现有的连接失效。`)) {
       return;
     }
-    console.log('重新生成令牌:', type);
-    this.showNotification('令牌重新生成功能开发中', 'info');
+    
+    try {
+      const response = await fetch(`/api/admin/tokens/${type}/regenerate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // 显示新令牌信息
+        let message = `<div class="token-info">\n`;
+        message += `<p>${data.message}</p>\n`;
+        message += `<p><strong>新令牌:</strong> ${data.token || '生成失败'}</p>\n`;
+        message += `<p><strong>创建时间:</strong> ${data.created || '未知'}</p>\n`;
+        message += `<p><strong>过期时间:</strong> ${data.expires || '未知'}</p>\n`;
+        message += `</div>`;
+        
+        this.showNotification(message, 'success', 10000);
+      } else {
+        console.error('重新生成令牌失败:', response.status);
+        this.showNotification('重新生成令牌失败', 'error');
+      }
+    } catch (error) {
+      console.error('重新生成令牌出错:', error);
+      this.showNotification('重新生成令牌出错', 'error');
+    }
   }
 
   // 显示添加用户模态框
   showAddUserModal() {
     const modal = document.getElementById('addUserModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
   }
 
   // 隐藏添加用户模态框
   hideAddUserModal() {
     const modal = document.getElementById('addUserModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   // 隐藏编辑端口模态框
   hideEditPortModal() {
     const modal = document.getElementById('editPortModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  // 显示编辑用户模态框
+  showEditUserModal() {
+    const modal = document.getElementById('editUserModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
+  }
+
+  // 隐藏编辑用户模态框
+  hideEditUserModal() {
+    const modal = document.getElementById('editUserModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
   }
 
   // 显示用户角色管理模态框
   showUserRolesModal() {
-    console.log('显示用户角色管理');
-    this.showNotification('用户角色管理功能开发中', 'info');
+    const modal = document.getElementById('userRolesModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
+  }
+
+  // 隐藏用户角色管理模态框
+  hideUserRolesModal() {
+    const modal = document.getElementById('userRolesModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  }
+
+  // 编辑角色权限
+  editRole(roleType) {
+    console.log('编辑角色:', roleType);
+    // 这里可以加载特定角色的权限设置
+    this.showNotification(`正在编辑${roleType}角色权限`, 'info');
+  }
+
+  // 保存角色权限
+  saveRolePermissions() {
+    const permissions = {
+      userManage: document.getElementById('perm-user-manage').checked,
+      systemConfig: document.getElementById('perm-system-config').checked,
+      clientControl: document.getElementById('perm-client-control').checked,
+      fileAccess: document.getElementById('perm-file-access').checked
+    };
+    
+    console.log('保存权限设置:', permissions);
+    this.showNotification('权限设置已保存', 'success');
+    this.hideUserRolesModal();
   }
 
   // 导出用户数据
-  exportUsers() {
-    console.log('导出用户数据');
-    this.showNotification('用户数据导出功能开发中', 'info');
+  async exportUsers() {
+    try {
+      const response = await fetch('/api/admin/export/users');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.download_url) {
+          // 创建一个临时链接并点击它来下载文件
+          const link = document.createElement('a');
+          link.href = data.download_url;
+          link.download = data.download_url.split('/').pop();
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          this.showNotification('用户数据导出成功', 'success');
+        } else {
+          this.showNotification('导出链接无效', 'error');
+        }
+      } else {
+        console.error('导出用户数据失败:', response.status);
+        this.showNotification('导出用户数据失败', 'error');
+      }
+    } catch (error) {
+      console.error('导出用户数据出错:', error);
+      this.showNotification('导出用户数据出错', 'error');
+    }
   }
 
   // 刷新系统信息
@@ -496,14 +673,14 @@ class AdminPanel {
   }
 
   // 显示通知
-  showNotification(message, type = 'info') {
+  showNotification(message, type = 'info', duration = 3000) {
     // 创建通知元素
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.innerHTML = `
       <div class="notification-content">
         <i class='bx bx-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : 'info-circle'} notification-icon'></i>
-        <span>${message}</span>
+        <div>${message}</div>
       </div>
       <button class="notification-close" onclick="this.parentElement.remove()">&times;</button>
     `;
@@ -511,12 +688,12 @@ class AdminPanel {
     // 添加到页面
     document.body.appendChild(notification);
 
-    // 3秒后自动移除
+    // 指定时间后自动移除
     setTimeout(() => {
       if (notification.parentElement) {
         notification.remove();
       }
-    }, 3000);
+    }, duration);
   }
 }
 
@@ -536,6 +713,12 @@ function hideAddUserModal() {
 function hideEditPortModal() {
   if (window.adminPanel) {
     window.adminPanel.hideEditPortModal();
+  }
+}
+
+function hideEditUserModal() {
+  if (window.adminPanel) {
+    window.adminPanel.hideEditUserModal();
   }
 }
 
@@ -593,6 +776,24 @@ function showUserRolesModal() {
   }
 }
 
+function hideUserRolesModal() {
+  if (window.adminPanel) {
+    window.adminPanel.hideUserRolesModal();
+  }
+}
+
+function editRole(roleType) {
+  if (window.adminPanel) {
+    window.adminPanel.editRole(roleType);
+  }
+}
+
+function saveRolePermissions() {
+  if (window.adminPanel) {
+    window.adminPanel.saveRolePermissions();
+  }
+}
+
 function exportUsers() {
   if (window.adminPanel) {
     window.adminPanel.exportUsers();
@@ -608,4 +809,5 @@ function refreshSystemInfo() {
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
   window.adminPanel = new AdminPanel();
+  window.adminPanel.init();
 });

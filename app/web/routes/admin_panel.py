@@ -14,7 +14,7 @@ admin_panel_bp = Blueprint('admin_panel', __name__)
 def admin_panel():
     """系统管理面板主页面"""
     # 检查用户权限
-    if not hasattr(current_user, 'role') or current_user.role != 'admin':
+    if not hasattr(current_user, 'role') or not current_user.is_administrator():
         # 如果不是管理员，重定向到首页或显示权限不足页面
         return render_template('dashboard/error.html', 
                              error_message='权限不足，需要管理员权限才能访问系统管理面板')

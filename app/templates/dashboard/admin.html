@@ -709,7 +709,7 @@
         </div>
         <div class="user-detail-item">
           <span class="user-detail-label">角色</span>
-          <span class="user-detail-value">{{ current_user.role|default('用户') }}</span>
+          <span class="user-detail-value">{{ current_user.role.name|default('用户') }}</span>
         </div>
         <div class="user-detail-item">
           <span class="user-detail-label">登录时间</span>
@@ -1106,6 +1106,135 @@
         <button type="submit" class="btn btn-primary">保存</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- 编辑用户模态框 -->
+<div class="modal-overlay" id="editUserModal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>编辑用户信息</h3>
+      <button class="modal-close" onclick="hideEditUserModal()">&times;</button>
+    </div>
+    
+    <form id="editUserForm">
+      <input type="hidden" id="editUserId">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">用户名</label>
+          <input type="text" class="form-control" id="editUsername" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">邮箱</label>
+          <input type="email" class="form-control" id="editEmail" required>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">新密码</label>
+          <input type="password" class="form-control" id="editPassword" placeholder="留空保持不变">
+        </div>
+        <div class="form-group">
+          <label class="form-label">确认新密码</label>
+          <input type="password" class="form-control" id="editConfirmPassword" placeholder="留空保持不变">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">角色</label>
+          <select class="form-control" id="editUserRole" required>
+            <option value="">选择角色</option>
+            <option value="admin">管理员</option>
+            <option value="user">普通用户</option>
+            <option value="guest">访客</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <select class="form-control" id="editUserStatus" required>
+            <option value="active">活跃</option>
+            <option value="inactive">非活跃</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" onclick="hideEditUserModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存更改</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 角色管理模态框 -->
+<div class="modal-overlay" id="userRolesModal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>用户角色管理</h3>
+      <button class="modal-close" onclick="hideUserRolesModal()">&times;</button>
+    </div>
+    
+    <div class="roles-content">
+      <div class="roles-section">
+        <h4>角色列表</h4>
+        <div class="roles-list">
+          <div class="role-item">
+            <span class="role-name">管理员</span>
+            <span class="role-desc">拥有系统所有权限</span>
+            <div class="role-actions">
+              <button class="btn btn-sm btn-secondary" onclick="editRole('admin')">编辑</button>
+            </div>
+          </div>
+          <div class="role-item">
+            <span class="role-name">普通用户</span>
+            <span class="role-desc">基本用户权限</span>
+            <div class="role-actions">
+              <button class="btn btn-sm btn-secondary" onclick="editRole('user')">编辑</button>
+            </div>
+          </div>
+          <div class="role-item">
+            <span class="role-name">访客</span>
+            <span class="role-desc">只读权限</span>
+            <div class="role-actions">
+              <button class="btn btn-sm btn-secondary" onclick="editRole('guest')">编辑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="permissions-section">
+        <h4>权限设置</h4>
+        <div class="permissions-grid">
+          <div class="permission-item">
+            <label class="permission-label">
+              <input type="checkbox" id="perm-user-manage"> 用户管理
+            </label>
+          </div>
+          <div class="permission-item">
+            <label class="permission-label">
+              <input type="checkbox" id="perm-system-config"> 系统配置
+            </label>
+          </div>
+          <div class="permission-item">
+            <label class="permission-label">
+              <input type="checkbox" id="perm-client-control"> 客户端控制
+            </label>
+          </div>
+          <div class="permission-item">
+            <label class="permission-label">
+              <input type="checkbox" id="perm-file-access"> 文件访问
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" onclick="hideUserRolesModal()">关闭</button>
+      <button type="button" class="btn btn-primary" onclick="saveRolePermissions()">保存权限</button>
+    </div>
   </div>
 </div>
 {% endblock %}
