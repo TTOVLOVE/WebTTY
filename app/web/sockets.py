@@ -2,7 +2,7 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import request
 import os
 import base64
-from utils.helpers import human_readable_size
+from ..utils.helpers import human_readable_size
 from ..services import client_manager
 from ..services.transfer_service import save_screenshot
 
@@ -23,7 +23,53 @@ def init_socketio(socketio):
     @socketio.on('get_clients')
     def get_clients():
         """获取客户端列表"""
-        clients = {cid: info for cid, info in client_manager.client_info.items()}
+        def norm(val):
+            if val is None:
+                return ''
+            s = str(val).strip()
+            return '' if s in ('', '未知', '获取中...', 'None') else s
+        
+        def extract_ip(addr):
+            if addr is None:
+                return ''
+            if isinstance(addr, (list, tuple)) and len(addr) > 0:
+                return str(addr[0])
+            s = str(addr)
+            import re
+            m = re.search(r'([0-9]{1,3}(?:\.[0-9]{1,3}){3})', s)
+            return m.group(1) if m else s
+        
+        clients = {}
+        try:
+            # 延迟导入，避免模块循环
+            from ..models import Client
+            for cid, info in client_manager.client_info.items():
+                # 复制以免修改原字典
+                datum = dict(info) if isinstance(info, dict) else {}
+                hostname = norm(datum.get('hostname'))
+                user = norm(datum.get('user'))
+                ip = extract_ip(datum.get('addr')) or norm(datum.get('ip') or datum.get('ip_address'))
+                # 如 hostname 缺失，尝试从数据库回填
+                if not hostname:
+                    try:
+                        db_client_id = datum.get('db_client_id')
+                        if db_client_id:
+                            c = Client.query.get(db_client_id)
+                        else:
+                            c = Client.query.filter_by(client_id=cid).first()
+                        if c and norm(getattr(c, 'hostname', None)):
+                            hostname = norm(c.hostname)
+                            datum['hostname'] = hostname
+                    except Exception:
+                        pass
+                # 计算显示名
+                display_name = hostname or user or ip or f"客户端 {cid}"
+                datum['display_name'] = display_name
+                clients[cid] = datum
+        except Exception:
+            # 失败则回退为原始结构
+            clients = {cid: info for cid, info in client_manager.client_info.items()}
+        
         emit('clients_list', {'clients': clients})
     
     @socketio.on('send_command')

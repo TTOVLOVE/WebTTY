@@ -1,0 +1,487 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}个人信息{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .profile-header {
+        text-align: center;
+        padding: 20px 0;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 20px;
+    }
+    
+    .avatar-container {
+        position: relative;
+        display: inline-block;
+        margin-bottom: 15px;
+    }
+    
+    .avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 4px solid var(--primary-color);
+    }
+    
+    .avatar-upload {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .profile-info {
+        margin: 15px 0;
+    }
+    
+    .profile-info h3 {
+        margin: 0;
+        color: var(--text-primary);
+    }
+    
+    .profile-info p {
+        margin: 5px 0;
+        color: var(--text-secondary);
+    }
+    
+    .nav-tabs {
+        border-bottom: 2px solid var(--border-color);
+        margin-bottom: 20px;
+    }
+    
+    .nav-tabs .nav-link {
+        border: none;
+        border-bottom: 2px solid transparent;
+        background: none;
+        color: var(--text-secondary);
+        padding: 10px 20px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    .form-section {
+        margin-bottom: 30px;
+    }
+    
+    .form-section h4 {
+        margin-bottom: 15px;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 10px;
+    }
+    
+    .activity-item {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        border-bottom: 1px solid var(--border-color);
+        transition: background-color 0.3s ease;
+    }
+    
+    .activity-item:hover {
+        background-color: var(--bg-secondary);
+    }
+    
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+    }
+    
+    .activity-content {
+        flex: 1;
+    }
+    
+    .activity-time {
+        color: var(--text-secondary);
+        font-size: 12px;
+    }
+    
+    .security-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .security-item:last-child {
+        border-bottom: none;
+    }
+    
+    .security-info h5 {
+        margin: 0;
+        color: var(--text-primary);
+    }
+    
+    .security-info p {
+        margin: 5px 0 0 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+    }
+    
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+    
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 24px;
+    }
+    
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+        background-color: var(--primary-color);
+    }
+    
+    input:checked + .slider:before {
+        transform: translateX(26px);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-card {
+        background: var(--bg-secondary);
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-number {
+        font-size: 2em;
+        font-weight: bold;
+        color: var(--primary-color);
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        color: var(--text-secondary);
+        font-size: 14px;
+    }
+    
+    .password-strength {
+        margin-top: 10px;
+    }
+    
+    .strength-bar {
+        height: 4px;
+        background-color: var(--bg-secondary);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 5px 0;
+    }
+    
+    .strength-fill {
+        height: 100%;
+        transition: width 0.3s ease, background-color 0.3s ease;
+    }
+    
+    .strength-weak { background-color: #dc3545; }
+    .strength-medium { background-color: #ffc107; }
+    .strength-strong { background-color: #28a745; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-header">
+                <h1><i class="fas fa-user"></i> 个人信息</h1>
+                <p class="text-muted">管理您的个人资料和账户设置</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- 左侧个人信息卡片 -->
+        <div class="col-lg-4">
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div class="avatar-container">
+                        <img src="{{ user.avatar or '/static/images/default-avatar.png' }}" alt="头像" class="avatar" id="avatarImg">
+                        <button class="avatar-upload" onclick="document.getElementById('avatarInput').click()">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                        <input type="file" id="avatarInput" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="profile-info">
+                        <h3 id="displayUsername">{{ user.username or '未设置' }}</h3>
+                        <p id="displayPosition">{{ user.position or '未设置职位' }}</p>
+                        <p id="displayDepartment">{{ user.department or '未设置部门' }}</p>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="loginCount">156</div>
+                        <div class="stat-label">登录次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="lastLoginDays">2</div>
+                        <div class="stat-label">天前登录</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧详细信息 -->
+        <div class="col-lg-8">
+            <!-- 导航标签 -->
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <button class="nav-link active" data-tab="basic-info">基本信息</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-tab="security">安全设置</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-tab="activity">活动记录</button>
+                </li>
+            </ul>
+            
+            <!-- 基本信息标签页 -->
+            <div id="basic-info" class="tab-content active">
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-user-edit"></i> 编辑个人信息</h4>
+                        <form id="profileForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="username">用户名</label>
+                                        <input type="text" class="form-control" id="username" value="{{ user.username or '' }}">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="email">邮箱</label>
+                                        <input type="email" class="form-control" id="email" value="{{ user.email or '' }}">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="phone">手机号</label>
+                                        <input type="tel" class="form-control" id="phone" value="{{ user.phone or '' }}">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="department">部门</label>
+                                        <input type="text" class="form-control" id="department" value="{{ user.department or '' }}">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="position">职位</label>
+                                <input type="text" class="form-control" id="position" value="{{ user.position or '' }}">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="description">个人简介</label>
+                                <textarea class="form-control" id="description" rows="3" placeholder="介绍一下自己...">{{ user.description or '' }}</textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> 保存更改
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-key"></i> 修改密码</h4>
+                        <form id="passwordForm">
+                            <div class="form-group">
+                                <label for="currentPassword">当前密码</label>
+                                <input type="password" class="form-control" id="currentPassword" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="newPassword">新密码</label>
+                                <input type="password" class="form-control" id="newPassword" required>
+                                <div class="password-strength">
+                                    <div class="strength-bar">
+                                        <div class="strength-fill" id="strengthFill"></div>
+                                    </div>
+                                    <small id="strengthText" class="text-muted">请输入至少6位密码</small>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="confirmPassword">确认新密码</label>
+                                <input type="password" class="form-control" id="confirmPassword" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-lock"></i> 修改密码
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 安全设置标签页 -->
+            <div id="security" class="tab-content">
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-shield-alt"></i> 安全设置</h4>
+                        
+                        <div class="security-item">
+                            <div class="security-info">
+                                <h5>双因素认证</h5>
+                                <p>为您的账户添加额外的安全保护</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="twoFactorSwitch">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        
+                        <div class="security-item">
+                            <div class="security-info">
+                                <h5>登录通知</h5>
+                                <p>当有新设备登录时发送邮件通知</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="loginNotificationSwitch" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        
+                        <div class="security-item">
+                            <div class="security-info">
+                                <h5>会话超时</h5>
+                                <p>设置自动登出时间（分钟）</p>
+                            </div>
+                            <select class="form-control" id="sessionTimeout" style="width: 120px;">
+                                <option value="15">15分钟</option>
+                                <option value="30" selected>30分钟</option>
+                                <option value="60">1小时</option>
+                                <option value="120">2小时</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-primary" id="saveSecurityBtn">
+                                <i class="fas fa-save"></i> 保存安全设置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-info-circle"></i> 安全信息</h4>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>密码最后修改:</strong> <span id="passwordLastChanged">2024-01-01</span></p>
+                                <p><strong>登录失败次数:</strong> <span id="failedAttempts">0</span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>账户状态:</strong> <span class="text-success">正常</span></p>
+                                <p><strong>最后登录IP:</strong> <span id="lastLoginIP">192.168.1.100</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 活动记录标签页 -->
+            <div id="activity" class="tab-content">
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-history"></i> 最近活动</h4>
+                        <div id="activityList">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                                <p>正在加载活动记录...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+{% endblock %}

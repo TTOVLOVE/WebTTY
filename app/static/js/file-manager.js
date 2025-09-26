@@ -116,7 +116,8 @@ class FileManager {
             const clientInfo = clients[clientId];
             const option = document.createElement('option');
             option.value = clientId;
-            option.textContent = `客户端 ${clientId} - ${clientInfo.user || '未知用户'} (${clientInfo.addr || '未知IP'})`;
+            const displayName = clientInfo.hostname || `客户端 ${clientId}`;
+            option.textContent = `${displayName} - ${clientInfo.user || '未知用户'} (${clientInfo.addr || '未知IP'})`;
             select.appendChild(option);
         });
 

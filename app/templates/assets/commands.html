@@ -39,6 +39,13 @@
           Linux 命令
         </button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="android-tab" data-bs-toggle="pill" 
+                data-bs-target="#android" type="button" role="tab">
+          <i class='bx bxl-android'></i>
+          Android 命令
+        </button>
+      </li>
     </ul>
 
     <div class="tab-content" id="osTabsContent">
@@ -52,6 +59,11 @@
           <!-- Linux命令将通过JavaScript动态加载 -->
         </div>
       </div>
+      <div class="tab-pane fade" id="android" role="tabpanel">
+        <div id="androidCommands" class="row g-3">
+          <!-- Android命令将通过JavaScript动态加载 -->
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -61,6 +73,7 @@
 <script>
 let windowsCommands = [];
 let linuxCommands = [];
+let androidCommands = [];
 
 // 从 JSON 文件加载命令
 async function loadCommands() {
@@ -70,8 +83,12 @@ async function loadCommands() {
   const linuxRes = await fetch("/static/data/linux_commands.json");
   linuxCommands = await linuxRes.json();
 
+  const androidRes = await fetch("/static/data/android_commands.json");
+  androidCommands = await androidRes.json();
+
   renderCommands(windowsCommands, 'windowsCommands');
   renderCommands(linuxCommands, 'linuxCommands');
+  renderCommands(androidCommands, 'androidCommands');
 }
 
 // 渲染命令列表
@@ -110,13 +127,20 @@ function searchCommands() {
       cmd.category.toLowerCase().includes(searchText)
     );
     renderCommands(filtered, 'windowsCommands');
-  } else {
+  } else if (activeTab === 'linux-tab') {
     const filtered = linuxCommands.filter(cmd =>
       cmd.name.toLowerCase().includes(searchText) ||
       cmd.description.toLowerCase().includes(searchText) ||
       cmd.category.toLowerCase().includes(searchText)
     );
     renderCommands(filtered, 'linuxCommands');
+  } else if (activeTab === 'android-tab') {
+    const filtered = androidCommands.filter(cmd =>
+      cmd.name.toLowerCase().includes(searchText) ||
+      cmd.description.toLowerCase().includes(searchText) ||
+      cmd.category.toLowerCase().includes(searchText)
+    );
+    renderCommands(filtered, 'androidCommands');
   }
 }
 
@@ -128,6 +152,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(searchCommands, 100);
   });
   document.getElementById('linux-tab').addEventListener('click', () => {
+    setTimeout(searchCommands, 100);
+  });
+  document.getElementById('android-tab').addEventListener('click', () => {
     setTimeout(searchCommands, 100);
   });
 });

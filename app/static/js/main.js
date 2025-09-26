@@ -269,7 +269,8 @@ class RATControlPanel {
       const clientInfo = data.clients[clientId];
       const option = document.createElement('option');
       option.value = clientId;
-      option.textContent = `客户端 ${clientId} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
+      const displayName = clientInfo.hostname || `客户端 ${clientId}`;
+      option.textContent = `${displayName} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
       select.appendChild(option);
     });
 
@@ -311,7 +312,7 @@ class RATControlPanel {
       <div class="client-header">
         <div class="client-id">
           <i class='bx bx-laptop'></i>
-          客户端 ${clientId}
+          ${clientInfo.hostname || ('客户端 ' + clientId)}
         </div>
         <div class="client-status online">
           <div class="status-dot online"></div>

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, send_from_direct
 from flask_login import login_required
 import os
 from datetime import datetime
-from utils.helpers import human_readable_size
+from ...utils.helpers import human_readable_size
 import tempfile
 import shutil
 import zipfile

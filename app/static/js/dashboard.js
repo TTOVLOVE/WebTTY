@@ -109,7 +109,8 @@ class Dashboard {
                 const clientInfo = clientsData[clientId];
                 const option = document.createElement("option");
                 option.value = clientId;
-                option.innerHTML = `客户端 ${clientId} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
+                const displayName = clientInfo.hostname || `客户端 ${clientId}`;
+                option.innerHTML = `${displayName} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
                 select.appendChild(option);
             });
             
@@ -390,12 +391,20 @@ class Dashboard {
 
     loadQuickConnections() {
         fetch('/api/connections')
-            .then(response => response.json())
+            .then(response => {
+                const ct = response.headers.get('content-type') || '';
+                if (!response.ok || !ct.includes('application/json')) {
+                    throw new Error(`无效的响应: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                this.displayQuickConnections(data.connections);
+                const connections = Array.isArray(data.connections) ? data.connections : [];
+                this.displayQuickConnections(connections);
             })
             .catch(error => {
                 console.error('加载快速连接失败:', error);
+                this.displayQuickConnections([]);
             });
     }
 
@@ -459,6 +468,72 @@ class Dashboard {
     }
 }
 
+// 仪表板专用JavaScript
+function updateClientList(data) {
+  const select = document.getElementById('client-select');
+  const listContainer = document.getElementById('client-list');
+
+  if (select) {
+    const previouslySelected = select.value;
+    select.innerHTML = '';
+
+    if (!data || !data.clients || Object.keys(data.clients).length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '无在线客户端';
+      option.disabled = true;
+      select.appendChild(option);
+    } else {
+      const clientIds = Object.keys(data.clients);
+      clientIds.forEach(clientId => {
+        const info = data.clients[clientId];
+        const option = document.createElement('option');
+        option.value = clientId;
+        const displayName = info.hostname || `客户端 ${clientId}`;
+        option.textContent = `${displayName} (${info.user || '未知'}) @ ${info.addr || '未知IP'}`;
+        select.appendChild(option);
+      });
+
+      if (clientIds.includes(previouslySelected)) {
+        select.value = previouslySelected;
+      } else {
+        select.value = clientIds[0];
+      }
+    }
+  }
+
+  if (listContainer) {
+    listContainer.innerHTML = '';
+    if (!data || !data.clients || Object.keys(data.clients).length === 0) {
+      listContainer.innerHTML = '<p>暂无连接的客户端</p>';
+      return;
+    }
+
+    Object.keys(data.clients).forEach(clientId => {
+      const info = data.clients[clientId];
+      const card = document.createElement('div');
+      card.className = 'client-card';
+      const title = info.hostname || `客户端 ${clientId}`;
+      card.innerHTML = `
+        <div class="client-card-header">
+          <span class="client-card-header"><i class='bx bx-laptop'></i> ${title}</span>
+          <span class="client-status online"><span class="status-dot"></span> 在线</span>
+        </div>
+        <div class="client-card-body">
+          <div><strong>用户：</strong>${info.user || '未知'}</div>
+          <div><strong>IP：</strong>${info.addr || '未知IP'}</div>
+          <div><strong>系统：</strong>${info.os || '未知'}</div>
+        </div>
+        <div class="client-card-actions">
+          <button class="btn btn-primary" onclick="window.location.href='/?client=${clientId}'"><i class='bx bx-terminal'></i> 控制台</button>
+          <button class="btn btn-success" onclick="sendQuickCommand('screenshot', '', '${clientId}')"><i class='bx bx-camera'></i> 截屏</button>
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+  }
+}
+
 // 全局实例
 let dashboard;
 
@@ -495,9 +570,11 @@ function quickConnect(connectionId) {
 }
 
 function closeModal() {
+    const modal = document.getElementById('screenshotModal');
     if (modal) {
-      modal.style.display = 'flex';
-    modal.classList.remove('active');
-    setTimeout(() => modal.style.display = 'none', 300);
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
     }
 }

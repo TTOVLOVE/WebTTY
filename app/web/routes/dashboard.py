@@ -37,7 +37,7 @@ def remote_sessions():
 def get_clients():
     """获取客户端列表的API"""
     # 这里应该从client_manager获取实际的客户端信息
-    from ..services import client_manager
+    from services import client_manager
     clients = {cid: info for cid, info in client_manager.client_info.items()}
     return jsonify({'clients': clients})
 

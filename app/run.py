@@ -1,4 +1,5 @@
 import os
+
 from . import create_app
 from .extensions import socketio
 

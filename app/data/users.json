@@ -1,0 +1,20 @@
+{
+  "admin": {
+    "user_id": "admin",
+    "username": "admin",
+    "email": "admin@example.com",
+    "phone": "13800138000",
+    "department": "IT部门",
+    "position": "系统管理员",
+    "description": "系统管理员账户",
+    "avatar": "/static/images/default-avatar.png",
+    "password": "pbkdf2:sha256:600000$2HCPMFkkj4yRQr9v$b8b06b43cf4c844b15ef4a10dc00e5027bfdf019d3b166a344f1198a8365f616",
+    "created_at": "2025-09-25T21:41:08.715432",
+    "updated_at": "2025-09-25T21:41:08.715432",
+    "two_factor_enabled": false,
+    "login_notifications": true,
+    "session_timeout": 30,
+    "password_last_changed": "2025-09-25T21:41:08.715432",
+    "failed_login_attempts": 0
+  }
+}

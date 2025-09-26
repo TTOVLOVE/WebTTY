@@ -12,6 +12,8 @@ from tkinter import messagebox
 import threading
 import ctypes
 from ttkthemes import ThemedTk
+import hashlib
+import uuid
 
 # 发送加锁，避免多线程发送数据时内容交叉
 SEND_LOCK = threading.Lock()
@@ -553,10 +555,25 @@ def main_loop(server_ip, server_port):
             state['socket'] = client_socket
 
             os_info = f"{platform.system()} {platform.release()}"
+            
+            # 生成设备指纹和获取硬件信息
+            device_fingerprint = generate_device_fingerprint()
+            hardware_id = get_hardware_id()
+            mac_address = get_mac_address()
+            hostname = platform.node()
 
             try:
-                reliable_send(client_socket,
-                              {"status": "connected", "cwd": state['cwd'], "user": os.getlogin(), "os": os_info})
+                connection_info = {
+                    "status": "connected", 
+                    "cwd": state['cwd'], 
+                    "user": os.getlogin(), 
+                    "os": os_info,
+                    "device_fingerprint": device_fingerprint,
+                    "hardware_id": hardware_id,
+                    "mac_address": mac_address,
+                    "hostname": hostname
+                }
+                reliable_send(client_socket, connection_info)
             except Exception as e:
                 print(f"[错误] 发送初始连接信息失败: {e}")
                 break
@@ -710,6 +727,139 @@ class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
         self.status_label.config(text=f"Status: {text}", fg=color)
         if text.startswith("Connection Failed"):
             self.connect_button["state"] = "normal"
+
+
+def get_hardware_id():
+    """获取硬件ID"""
+    try:
+        sysname = platform.system()
+        if sysname == "Windows":
+            # 优先从注册表获取 MachineGuid（稳定且不依赖已弃用的 wmic）
+            try:
+                import winreg
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+                        value, _ = winreg.QueryValueEx(key, "MachineGuid")
+                        if value:
+                            return str(value).strip()
+                except Exception as e:
+                    print(f"[警告] 读取注册表MachineGuid失败: {e}")
+
+                # 回退：通过 PowerShell 获取硬件 UUID
+                try:
+                    ps_cmd = "Get-CimInstance Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID"
+                    result = subprocess.run([
+                        'powershell', '-NoProfile', '-Command', ps_cmd
+                    ], capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        out = result.stdout.strip()
+                        if out:
+                            first_line = out.splitlines()[0].strip()
+                            if first_line and first_line not in ("00000000-0000-0000-0000-000000000000",):
+                                return first_line
+                except Exception as e:
+                    print(f"[警告] 通过PowerShell获取UUID失败: {e}")
+
+                # 进一步回退：通过 PowerShell 获取主板序列号
+                try:
+                    ps_cmd = "Get-CimInstance Win32_BaseBoard | Select-Object -ExpandProperty SerialNumber"
+                    result = subprocess.run([
+                        'powershell', '-NoProfile', '-Command', ps_cmd
+                    ], capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        out = result.stdout.strip()
+                        if out:
+                            first_line = out.splitlines()[0].strip()
+                            if first_line and first_line.lower() != 'serialnumber':
+                                return first_line
+                except Exception as e:
+                    print(f"[警告] 通过PowerShell获取主板序列号失败: {e}")
+
+            except Exception as e:
+                # 捕获 Windows 分支内部可能的总体异常
+                print(f"[警告] Windows硬件ID获取失败: {e}")
+
+        elif sysname == "Linux":
+            # Linux: 获取机器ID
+            try:
+                with open('/etc/machine-id', 'r') as f:
+                    return f.read().strip()
+            except:
+                try:
+                    with open('/var/lib/dbus/machine-id', 'r') as f:
+                        return f.read().strip()
+                except:
+                    pass
+        elif sysname == "Darwin":  # macOS
+            # macOS: 获取硬件UUID
+            result = subprocess.run(['system_profiler', 'SPHardwareDataType'],
+                                     capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'Hardware UUID' in line:
+                        return line.split(':')[1].strip()
+    except Exception as e:
+        print(f"[警告] 获取硬件ID失败: {e}")
+
+    # 如果无法获取硬件ID，生成一个基于MAC地址的ID
+    try:
+        mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff)
+                        for elements in range(0, 2*6, 2)][::-1])
+        return hashlib.md5(mac.encode()).hexdigest()
+    except:
+        return None
+
+def get_mac_address():
+    """获取MAC地址"""
+    try:
+        mac = uuid.getnode()
+        mac_str = ':'.join(['{:02x}'.format((mac >> elements) & 0xff) 
+                           for elements in range(0,2*6,2)][::-1])
+        return mac_str
+    except Exception as e:
+        print(f"[警告] 获取MAC地址失败: {e}")
+        return None
+
+def generate_device_fingerprint():
+    """生成设备指纹"""
+    try:
+        # 收集设备信息
+        info_parts = []
+        
+        # 硬件ID
+        hardware_id = get_hardware_id()
+        if hardware_id:
+            info_parts.append(f"hw:{hardware_id}")
+        
+        # MAC地址
+        mac = get_mac_address()
+        if mac:
+            info_parts.append(f"mac:{mac}")
+        
+        # 操作系统信息
+        os_info = f"{platform.system()}:{platform.release()}"
+        info_parts.append(f"os:{os_info}")
+        
+        # 主机名
+        try:
+            hostname = platform.node()
+            if hostname:
+                info_parts.append(f"host:{hostname}")
+        except:
+            pass
+        
+        # 如果没有任何信息，使用随机UUID
+        if not info_parts:
+            return str(uuid.uuid4())
+        
+        # 生成指纹
+        fingerprint_data = "|".join(info_parts)
+        fingerprint = hashlib.sha256(fingerprint_data.encode()).hexdigest()
+        return fingerprint
+        
+    except Exception as e:
+        print(f"[警告] 生成设备指纹失败: {e}")
+        return str(uuid.uuid4())
 
 
 if __name__ == '__main__':

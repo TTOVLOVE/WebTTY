@@ -319,60 +319,7 @@
   gap: 0.5rem;
 }
 
-/* 用户管理卡片 */
-.user-management .card-icon {
-  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
-}
 
-.user-actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-.user-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.user-table th,
-.user-table td {
-  padding: 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.user-table th {
-  background: var(--light-bg);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.user-table tr:hover {
-  background: var(--light-bg);
-}
-
-.user-role {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.user-role.admin {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.user-role.user {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.user-role.guest {
-  background: #f3e8ff;
-  color: #7c3aed;
-}
 
 /* 响应式设计 */
 @media (max-width: 768px) {
@@ -722,7 +669,7 @@
       </div>
     </div>
 
-    <!-- 客户端管理 -->
+    <!-- 预留连接密钥设置 -->
     <div class="admin-card clients">
       <div class="card-header">
         <div class="card-icon">
@@ -934,153 +881,10 @@
       </div>
     </div>
 
-    <!-- 预留连接密钥设置 -->
-    <div class="admin-card settings">
-      <div class="card-header">
-        <div class="card-icon">
-          <i class='bx bx-key'></i>
-        </div>
-        <div>
-          <h3 class="card-title">连接密钥设置</h3>
-          <p class="card-subtitle">管理SSH密钥和访问令牌</p>
-        </div>
-      </div>
-      
-      <div class="setting-group">
-        <div class="setting-group-title">SSH密钥</div>
-        <div class="setting-item">
-          <span class="setting-label">RSA密钥</span>
-          <span class="setting-value">已配置</span>
-          <div class="setting-actions">
-            <button class="btn btn-secondary btn-sm" onclick="viewKey('rsa')">查看</button>
-            <button class="btn btn-danger btn-sm" onclick="regenerateKey('rsa')">重新生成</button>
-          </div>
-        </div>
-        <div class="setting-item">
-          <span class="setting-label">ED25519密钥</span>
-          <span class="setting-value">已配置</span>
-          <div class="setting-actions">
-            <button class="btn btn-secondary btn-sm" onclick="viewKey('ed25519')">查看</button>
-            <button class="btn btn-danger btn-sm" onclick="regenerateKey('ed25519')">重新生成</button>
-          </div>
-        </div>
-      </div>
-      
-      <div class="setting-group">
-        <div class="setting-group-title">访问令牌</div>
-        <div class="setting-item">
-          <span class="setting-label">API令牌</span>
-          <span class="setting-value">已生成</span>
-          <div class="setting-actions">
-            <button class="btn btn-secondary btn-sm" onclick="viewToken('api')">查看</button>
-            <button class="btn btn-danger btn-sm" onclick="regenerateToken('api')">重新生成</button>
-          </div>
-        </div>
-        <div class="setting-item">
-          <span class="setting-label">WebSocket令牌</span>
-          <span class="setting-value">已生成</span>
-          <div class="setting-actions">
-            <button class="btn btn-secondary btn-sm" onclick="viewToken('websocket')">查看</button>
-            <button class="btn btn-danger btn-sm" onclick="regenerateToken('websocket')">重新生成</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 系统用户管理 -->
-    <div class="admin-card user-management">
-      <div class="card-header">
-        <div class="card-icon">
-          <i class='bx bx-group'></i>
-        </div>
-        <div>
-          <h3 class="card-title">系统用户管理</h3>
-          <p class="card-subtitle">管理系统用户账户和权限</p>
-        </div>
-      </div>
-      
-      <div class="user-actions">
-        <button class="btn btn-primary" onclick="showAddUserModal()">
-          <i class='bx bx-plus'></i> 添加用户
-        </button>
-        <button class="btn btn-secondary" onclick="showUserRolesModal()">
-          <i class='bx bx-shield'></i> 角色管理
-        </button>
-        <button class="btn btn-secondary" onclick="exportUsers()">
-          <i class='bx bx-download'></i> 导出用户
-        </button>
-      </div>
-      
-      <div class="table-responsive">
-        <table class="user-table">
-          <thead>
-            <tr>
-              <th>用户名</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>最后登录</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="userTableBody">
-            <tr>
-              <td colspan="5" class="text-center text-muted">正在加载用户列表...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 </div>
 
-<!-- 添加用户模态框 -->
-<div class="modal-overlay" id="addUserModal" style="display: none;">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>添加新用户</h3>
-      <button class="modal-close" onclick="hideAddUserModal()">&times;</button>
-    </div>
-    
-    <form id="addUserForm">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">用户名</label>
-          <input type="text" class="form-control" id="newUsername" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">邮箱</label>
-          <input type="email" class="form-control" id="newEmail" required>
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">密码</label>
-          <input type="password" class="form-control" id="newPassword" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">确认密码</label>
-          <input type="password" class="form-control" id="confirmPassword" required>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label class="form-label">角色</label>
-        <select class="form-control" id="newUserRole" required>
-          <option value="">选择角色</option>
-          <option value="admin">管理员</option>
-          <option value="user">普通用户</option>
-          <option value="guest">访客</option>
-        </select>
-      </div>
-      
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" onclick="hideAddUserModal()">取消</button>
-        <button type="submit" class="btn btn-primary">创建用户</button>
-      </div>
-    </form>
-  </div>
-</div>
+
 
 <!-- 编辑端口模态框 -->
 <div class="modal-overlay" id="editPortModal" style="display: none;">
@@ -1109,134 +913,9 @@
   </div>
 </div>
 
-<!-- 编辑用户模态框 -->
-<div class="modal-overlay" id="editUserModal" style="display: none;">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>编辑用户信息</h3>
-      <button class="modal-close" onclick="hideEditUserModal()">&times;</button>
-    </div>
-    
-    <form id="editUserForm">
-      <input type="hidden" id="editUserId">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">用户名</label>
-          <input type="text" class="form-control" id="editUsername" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">邮箱</label>
-          <input type="email" class="form-control" id="editEmail" required>
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">新密码</label>
-          <input type="password" class="form-control" id="editPassword" placeholder="留空保持不变">
-        </div>
-        <div class="form-group">
-          <label class="form-label">确认新密码</label>
-          <input type="password" class="form-control" id="editConfirmPassword" placeholder="留空保持不变">
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">角色</label>
-          <select class="form-control" id="editUserRole" required>
-            <option value="">选择角色</option>
-            <option value="admin">管理员</option>
-            <option value="user">普通用户</option>
-            <option value="guest">访客</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">状态</label>
-          <select class="form-control" id="editUserStatus" required>
-            <option value="active">活跃</option>
-            <option value="inactive">非活跃</option>
-          </select>
-        </div>
-      </div>
-      
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" onclick="hideEditUserModal()">取消</button>
-        <button type="submit" class="btn btn-primary">保存更改</button>
-      </div>
-    </form>
-  </div>
-</div>
 
-<!-- 角色管理模态框 -->
-<div class="modal-overlay" id="userRolesModal" style="display: none;">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>用户角色管理</h3>
-      <button class="modal-close" onclick="hideUserRolesModal()">&times;</button>
-    </div>
-    
-    <div class="roles-content">
-      <div class="roles-section">
-        <h4>角色列表</h4>
-        <div class="roles-list">
-          <div class="role-item">
-            <span class="role-name">管理员</span>
-            <span class="role-desc">拥有系统所有权限</span>
-            <div class="role-actions">
-              <button class="btn btn-sm btn-secondary" onclick="editRole('admin')">编辑</button>
-            </div>
-          </div>
-          <div class="role-item">
-            <span class="role-name">普通用户</span>
-            <span class="role-desc">基本用户权限</span>
-            <div class="role-actions">
-              <button class="btn btn-sm btn-secondary" onclick="editRole('user')">编辑</button>
-            </div>
-          </div>
-          <div class="role-item">
-            <span class="role-name">访客</span>
-            <span class="role-desc">只读权限</span>
-            <div class="role-actions">
-              <button class="btn btn-sm btn-secondary" onclick="editRole('guest')">编辑</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="permissions-section">
-        <h4>权限设置</h4>
-        <div class="permissions-grid">
-          <div class="permission-item">
-            <label class="permission-label">
-              <input type="checkbox" id="perm-user-manage"> 用户管理
-            </label>
-          </div>
-          <div class="permission-item">
-            <label class="permission-label">
-              <input type="checkbox" id="perm-system-config"> 系统配置
-            </label>
-          </div>
-          <div class="permission-item">
-            <label class="permission-label">
-              <input type="checkbox" id="perm-client-control"> 客户端控制
-            </label>
-          </div>
-          <div class="permission-item">
-            <label class="permission-label">
-              <input type="checkbox" id="perm-file-access"> 文件访问
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="form-actions">
-      <button type="button" class="btn btn-secondary" onclick="hideUserRolesModal()">关闭</button>
-      <button type="button" class="btn btn-primary" onclick="saveRolePermissions()">保存权限</button>
-    </div>
-  </div>
-</div>
+
+
 {% endblock %}
 
 {% block extra_js %}

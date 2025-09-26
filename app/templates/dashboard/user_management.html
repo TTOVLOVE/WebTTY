@@ -1,0 +1,101 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}用户管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- 页面头部 -->
+  <div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="page-title">
+        <h1 class="h3 mb-0 text-primary">
+          <i class='bx bx-user me-2'></i>用户管理
+        </h1>
+        <p class="text-muted mb-0">管理系统用户账户和权限</p>
+      </div>
+      <button id="addUserBtn" class="btn btn-primary">
+        <i class='bx bx-plus me-1'></i>添加用户
+      </button>
+    </div>
+  </div>
+
+  <!-- 用户管理卡片 -->
+  <div class="control-panel">
+    <div class="control-panel-header">
+      <div class="control-panel-title">
+        <i class='bx bx-group'></i>
+        <span>用户列表</span>
+      </div>
+      <div class="text-white-50">
+        <small>管理所有系统用户</small>
+      </div>
+    </div>
+    
+    <div class="control-panel-body">
+      <!-- 用户表格 -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">
+                <i class='bx bx-user me-1'></i>用户名
+              </th>
+              <th scope="col">
+                <i class='bx bx-envelope me-1'></i>邮箱
+              </th>
+              <th scope="col">
+                <i class='bx bx-shield me-1'></i>角色
+              </th>
+              <th scope="col">
+                <i class='bx bx-check-circle me-1'></i>状态
+              </th>
+              <th scope="col">
+                <i class='bx bx-calendar me-1'></i>创建时间
+              </th>
+              <th scope="col" class="text-center">
+                <i class='bx bx-cog me-1'></i>操作
+              </th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <!-- 用户数据将通过JavaScript动态加载 -->
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- 分页控件 -->
+      <div class="d-flex justify-content-between align-items-center mt-4">
+        <div class="text-muted">
+          <small>
+            显示 <span id="startItem" class="fw-bold">1</span> 到 
+            <span id="endItem" class="fw-bold">10</span> 条，
+            共 <span id="totalItems" class="fw-bold text-primary">0</span> 条记录
+          </small>
+        </div>
+        <nav aria-label="用户列表分页">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item" id="prevPageItem">
+              <button class="page-link" id="prevPage" type="button">
+                <i class='bx bx-chevron-left'></i>
+                <span class="d-none d-sm-inline ms-1">上一页</span>
+              </button>
+            </li>
+            <span id="pageNumbers"></span>
+            <li class="page-item" id="nextPageItem">
+              <button class="page-link" id="nextPage" type="button">
+                <span class="d-none d-sm-inline me-1">下一页</span>
+                <i class='bx bx-chevron-right'></i>
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 包含用户模态框 -->
+{% include 'dashboard/modals/user_modal.html' %}
+
+<script src="{{ url_for('static', filename='js/user-management.js') }}"></script>
+{% endblock %}

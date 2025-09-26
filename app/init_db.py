@@ -1,11 +1,12 @@
 import sys
 import os
 
-# 添加父目录到路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) 
+# 添加当前目录到路径
+sys.path.insert(0, os.path.dirname(__file__))
 
-from app import create_app, db
-from app.models import Role, User
+from __init__ import create_app
+from extensions import db
+from models import Role, User
 from werkzeug.security import generate_password_hash
 
 def init_db():

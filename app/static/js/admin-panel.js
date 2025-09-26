@@ -11,44 +11,17 @@ class AdminPanel {
     this.loadSystemInfo();
     this.loadClientInfo();
     this.loadDatabaseInfo();
-    this.loadUserList();
     this.setupEventListeners();
     this.startAutoRefresh();
   }
 
   setupEventListeners() {
-    // 添加用户表单提交
-    const addUserForm = document.getElementById('addUserForm');
-    if (addUserForm) {
-      addUserForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.createUser();
-      });
-    }
-
-    // 编辑用户表单提交
-    const editUserForm = document.getElementById('editUserForm');
-    if (editUserForm) {
-      editUserForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.updateUser();
-      });
-    }
-
     // 编辑端口表单提交
     const editPortForm = document.getElementById('editPortForm');
     if (editPortForm) {
       editPortForm.addEventListener('submit', (e) => {
         e.preventDefault();
         this.savePortSetting();
-      });
-    }
-
-    // 密码确认验证
-    const confirmPassword = document.getElementById('confirmPassword');
-    if (confirmPassword) {
-      confirmPassword.addEventListener('input', () => {
-        this.validatePassword();
       });
     }
   }
@@ -179,229 +152,7 @@ class AdminPanel {
     if (dbActiveConnections) dbActiveConnections.textContent = data.active_connections;
   }
 
-  // 加载用户列表
-  async loadUserList() {
-    try {
-      const response = await fetch('/api/admin/users');
-      if (response.ok) {
-        const data = await response.json();
-        this.updateUserList(data.users);
-      } else {
-        console.error('加载用户列表失败:', response.status);
-        this.showNotification('加载用户列表失败', 'error');
-      }
-    } catch (error) {
-      console.error('加载用户列表出错:', error);
-      this.showNotification('加载用户列表出错', 'error');
-    }
-  }
 
-  // 更新用户列表显示
-  updateUserList(users) {
-    const userTableBody = document.getElementById('userTableBody');
-    if (!userTableBody) return;
-
-    if (users.length === 0) {
-      userTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无用户数据</td></tr>';
-      return;
-    }
-
-    let html = '';
-    users.forEach(user => {
-      const roleClass = user.role === 'admin' ? 'admin' : 
-                       user.role === 'user' ? 'user' : 'guest';
-      const statusClass = user.status === 'active' ? 'text-success' : 'text-muted';
-      
-      html += `
-        <tr>
-          <td>${user.username}</td>
-          <td><span class="user-role ${roleClass}">${user.role}</span></td>
-          <td class="${statusClass}">${user.status === 'active' ? '活跃' : '非活跃'}</td>
-          <td>${user.last_login}</td>
-          <td>
-            <button class="btn btn-secondary btn-sm" onclick="adminPanel.editUser(${user.id})">
-              <i class='bx bx-edit'></i>
-            </button>
-            <button class="btn btn-danger btn-sm" onclick="adminPanel.deleteUser(${user.id})">
-              <i class='bx bx-trash'></i>
-            </button>
-          </td>
-        </tr>
-      `;
-    });
-
-    userTableBody.innerHTML = html;
-  }
-
-  // 创建新用户
-  async createUser() {
-    const username = document.getElementById('newUsername').value;
-    const email = document.getElementById('newEmail').value;
-    const password = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-    const role = document.getElementById('newUserRole').value;
-
-    if (!this.validatePassword()) {
-      this.showNotification('密码确认不匹配', 'error');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username,
-          email,
-          password,
-          role
-        })
-      });
-
-      if (response.ok) {
-        this.showNotification('用户创建成功', 'success');
-        this.hideAddUserModal();
-        this.loadUserList();
-        this.clearAddUserForm();
-      } else {
-        const error = await response.json();
-        this.showNotification(error.message || '创建用户失败', 'error');
-      }
-    } catch (error) {
-      console.error('创建用户错误:', error);
-      this.showNotification('创建用户失败', 'error');
-    }
-  }
-
-  // 验证密码
-  validatePassword() {
-    const password = document.getElementById('newPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-    
-    if (password !== confirmPassword) {
-      document.getElementById('confirmPassword').style.borderColor = '#ef4444';
-      return false;
-    } else {
-      document.getElementById('confirmPassword').style.borderColor = '';
-      return true;
-    }
-  }
-
-  // 清空添加用户表单
-  clearAddUserForm() {
-    document.getElementById('addUserForm').reset();
-  }
-
-  // 编辑用户
-  async editUser(userId) {
-    console.log('编辑用户:', userId);
-    
-    try {
-      // 获取用户详情
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const user = data.user;
-        
-        // 填充编辑表单
-        document.getElementById('editUserId').value = user.id;
-        document.getElementById('editUsername').value = user.username;
-        document.getElementById('editEmail').value = user.email;
-        document.getElementById('editUserRole').value = user.role;
-        document.getElementById('editUserStatus').value = user.status;
-        
-        // 显示编辑模态框（使用自定义样式控制）
-        this.showEditUserModal();
-      } else {
-        const error = await response.json();
-        this.showNotification(error.error || '获取用户信息失败', 'error');
-      }
-    } catch (error) {
-      console.error('获取用户信息错误:', error);
-      this.showNotification('获取用户信息失败', 'error');
-    }
-  }
-  
-  // 更新用户信息
-  async updateUser() {
-    const userId = document.getElementById('editUserId').value;
-    const username = document.getElementById('editUsername').value;
-    const email = document.getElementById('editEmail').value;
-    const password = document.getElementById('editPassword').value;
-    const role = document.getElementById('editUserRole').value;
-    const status = document.getElementById('editUserStatus').value;
-    
-    try {
-      const userData = {
-        username,
-        email,
-        role,
-        status
-      };
-      
-      // 如果输入了密码，则添加到请求数据中
-      if (password.trim() !== '') {
-        userData.password = password;
-      }
-      
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData)
-      });
-
-      if (response.ok) {
-        this.showNotification('用户信息更新成功', 'success');
-        // 隐藏编辑模态框
-        const editUserModal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
-        editUserModal.hide();
-        // 重新加载用户列表
-        this.loadUserList();
-        // 清空编辑表单
-        document.getElementById('editUserForm').reset();
-      } else {
-        const error = await response.json();
-        this.showNotification(error.error || '更新用户信息失败', 'error');
-      }
-    } catch (error) {
-      console.error('更新用户信息错误:', error);
-      this.showNotification('更新用户信息失败', 'error');
-    }
-  }
-
-  // 删除用户
-  async deleteUser(userId) {
-    if (!confirm('确定要删除这个用户吗？此操作不可撤销。')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        this.showNotification('用户删除成功', 'success');
-        this.loadUserList();
-      } else {
-        const error = await response.json();
-        this.showNotification(error.message || '删除用户失败', 'error');
-      }
-    } catch (error) {
-      console.error('删除用户错误:', error);
-      this.showNotification('删除用户失败', 'error');
-    }
-  }
 
   // 编辑端口设置
   editPort(service, currentPort) {
@@ -545,23 +296,7 @@ class AdminPanel {
     }
   }
 
-  // 显示添加用户模态框
-  showAddUserModal() {
-    const modal = document.getElementById('addUserModal');
-    if (modal) {
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-    }
-  }
 
-  // 隐藏添加用户模态框
-  hideAddUserModal() {
-    const modal = document.getElementById('addUserModal');
-    if (modal) {
-      modal.classList.remove('active');
-      modal.style.display = 'none';
-    }
-  }
 
   // 隐藏编辑端口模态框
   hideEditPortModal() {
@@ -572,91 +307,7 @@ class AdminPanel {
     }
   }
 
-  // 显示编辑用户模态框
-  showEditUserModal() {
-    const modal = document.getElementById('editUserModal');
-    if (modal) {
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-    }
-  }
 
-  // 隐藏编辑用户模态框
-  hideEditUserModal() {
-    const modal = document.getElementById('editUserModal');
-    if (modal) {
-      modal.classList.remove('active');
-      modal.style.display = 'none';
-    }
-  }
-
-  // 显示用户角色管理模态框
-  showUserRolesModal() {
-    const modal = document.getElementById('userRolesModal');
-    if (modal) {
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-    }
-  }
-
-  // 隐藏用户角色管理模态框
-  hideUserRolesModal() {
-    const modal = document.getElementById('userRolesModal');
-    if (modal) {
-      modal.classList.remove('active');
-      modal.style.display = 'none';
-    }
-  }
-
-  // 编辑角色权限
-  editRole(roleType) {
-    console.log('编辑角色:', roleType);
-    // 这里可以加载特定角色的权限设置
-    this.showNotification(`正在编辑${roleType}角色权限`, 'info');
-  }
-
-  // 保存角色权限
-  saveRolePermissions() {
-    const permissions = {
-      userManage: document.getElementById('perm-user-manage').checked,
-      systemConfig: document.getElementById('perm-system-config').checked,
-      clientControl: document.getElementById('perm-client-control').checked,
-      fileAccess: document.getElementById('perm-file-access').checked
-    };
-    
-    console.log('保存权限设置:', permissions);
-    this.showNotification('权限设置已保存', 'success');
-    this.hideUserRolesModal();
-  }
-
-  // 导出用户数据
-  async exportUsers() {
-    try {
-      const response = await fetch('/api/admin/export/users');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.download_url) {
-          // 创建一个临时链接并点击它来下载文件
-          const link = document.createElement('a');
-          link.href = data.download_url;
-          link.download = data.download_url.split('/').pop();
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          this.showNotification('用户数据导出成功', 'success');
-        } else {
-          this.showNotification('导出链接无效', 'error');
-        }
-      } else {
-        console.error('导出用户数据失败:', response.status);
-        this.showNotification('导出用户数据失败', 'error');
-      }
-    } catch (error) {
-      console.error('导出用户数据出错:', error);
-      this.showNotification('导出用户数据出错', 'error');
-    }
-  }
 
   // 刷新系统信息
   refreshSystemInfo() {
@@ -698,27 +349,9 @@ class AdminPanel {
 }
 
 // 全局函数，供HTML调用
-function showAddUserModal() {
-  if (window.adminPanel) {
-    window.adminPanel.showAddUserModal();
-  }
-}
-
-function hideAddUserModal() {
-  if (window.adminPanel) {
-    window.adminPanel.hideAddUserModal();
-  }
-}
-
 function hideEditPortModal() {
   if (window.adminPanel) {
     window.adminPanel.hideEditPortModal();
-  }
-}
-
-function hideEditUserModal() {
-  if (window.adminPanel) {
-    window.adminPanel.hideEditUserModal();
   }
 }
 
@@ -767,36 +400,6 @@ function viewToken(type) {
 function regenerateToken(type) {
   if (window.adminPanel) {
     window.adminPanel.regenerateToken(type);
-  }
-}
-
-function showUserRolesModal() {
-  if (window.adminPanel) {
-    window.adminPanel.showUserRolesModal();
-  }
-}
-
-function hideUserRolesModal() {
-  if (window.adminPanel) {
-    window.adminPanel.hideUserRolesModal();
-  }
-}
-
-function editRole(roleType) {
-  if (window.adminPanel) {
-    window.adminPanel.editRole(roleType);
-  }
-}
-
-function saveRolePermissions() {
-  if (window.adminPanel) {
-    window.adminPanel.saveRolePermissions();
-  }
-}
-
-function exportUsers() {
-  if (window.adminPanel) {
-    window.adminPanel.exportUsers();
   }
 }
 
