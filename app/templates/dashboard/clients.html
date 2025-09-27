@@ -34,6 +34,8 @@
 <script src="{{ url_for('static', filename='js/file-manager-modal.js') }}"></script>
 <script>
 let socket;
+let clientsState = {};
+let hasConnected = false; // Flag to track initial connection
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -45,27 +47,47 @@ function initializeSocket() {
     socket = io();
     
     socket.on('connect', () => {
-        console.log('已连接到服务器');
+        if (!hasConnected) {
+            console.log('已连接到服务器');
+            hasConnected = true;
+        }
         requestClientList();
     });
     
     socket.on('clients_list', (data) => {
-        updateClientList(data.clients);
+        clientsState = data && data.clients ? data.clients : {};
+        updateClientList(clientsState);
     });
     
     socket.on('new_client', (clientData) => {
         console.log('新客户端连接:', clientData);
-        requestClientList();
+        const id = String(clientData.id);
+        clientsState[id] = {
+            ...(clientsState[id] || {}),
+            id,
+            addr: clientData.addr,
+            user: (clientsState[id] && clientsState[id].user) || '获取中...',
+            initial_cwd: (clientsState[id] && clientsState[id].initial_cwd) || '获取中...',
+            os: (clientsState[id] && clientsState[id].os) || '获取中...'
+        };
+        updateClientList(clientsState);
     });
     
     socket.on('client_updated', (clientData) => {
         console.log('客户端信息更新:', clientData);
-        requestClientList();
+        const id = String(clientData.id);
+        clientsState[id] = {
+            ...(clientsState[id] || {}),
+            ...clientData
+        };
+        updateClientList(clientsState);
     });
     
     socket.on('client_disconnected', (data) => {
         console.log('客户端断开连接:', data);
-        requestClientList();
+        const id = String(data.id);
+        delete clientsState[id];
+        updateClientList(clientsState);
     });
 
     socket.on('status_update', (data) => {
@@ -135,7 +157,7 @@ function getClientDisplayName(clientId, client) {
 
 function updateClientList(clients) {
     const container = document.getElementById('client-list');
-    const clientIds = Object.keys(clients || {});
+    const clientIds = Object.keys(clients || clientsState || {});
     
     if (clientIds.length === 0) {
         container.innerHTML = `
@@ -149,7 +171,7 @@ function updateClientList(clients) {
     }
     
     const clientCards = clientIds.map(clientId => {
-        const client = clients[clientId];
+        const client = (clients || clientsState)[clientId];
         const displayName = client.display_name || getClientDisplayName(clientId, client);
         if (displayName === `客户端 ${clientId}`) {
             console.debug('[clients] 未找到更优名称，使用默认回退', { clientId, client });

@@ -7,7 +7,7 @@
     "department": "IT部门",
     "position": "系统管理员",
     "description": "系统管理员账户",
-    "avatar": "/static/images/default-avatar.png",
+    "avatar": "/static/images/default-avatar.svg",
     "password": "pbkdf2:sha256:600000$2HCPMFkkj4yRQr9v$b8b06b43cf4c844b15ef4a10dc00e5027bfdf019d3b166a344f1198a8365f616",
     "created_at": "2025-09-25T21:41:08.715432",
     "updated_at": "2025-09-25T21:41:08.715432",
@@ -15,6 +15,24 @@
     "login_notifications": true,
     "session_timeout": 30,
     "password_last_changed": "2025-09-25T21:41:08.715432",
+    "failed_login_attempts": 0
+  },
+  "tanmingyu": {
+    "user_id": "tanmingyu",
+    "username": "tanmingyu",
+    "email": "3198974353@qq.com",
+    "phone": "15924855693",
+    "department": "",
+    "position": "",
+    "description": "",
+    "avatar": "/static/images/default-avatar.svg",
+    "password": "",
+    "created_at": "2025-09-26T21:59:43.132408",
+    "updated_at": "2025-09-26T21:59:43.132408",
+    "two_factor_enabled": false,
+    "login_notifications": true,
+    "session_timeout": 30,
+    "password_last_changed": "2025-09-26T21:59:43.132408",
     "failed_login_attempts": 0
   }
 }

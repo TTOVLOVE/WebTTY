@@ -58,6 +58,21 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
+        .btn-guest-login {
+            border-radius: 10px;
+            padding: 12px;
+            font-weight: 600;
+            width: 100%;
+            border: 2px solid #6c757d;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+        .btn-guest-login:hover {
+            background-color: #6c757d;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.4);
+        }
         .alert {
             border-radius: 10px;
             border: none;
@@ -102,6 +117,13 @@
             
             <button type="submit" class="btn btn-primary btn-login">
                 <i class='bx bx-log-in'></i> 登录
+            </button>
+        </form>
+        
+        <!-- 游客登录按钮 -->
+        <form method="POST" action="{{ url_for('auth.guest_login') }}" class="mt-3">
+            <button type="submit" class="btn btn-outline-secondary btn-guest-login">
+                <i class='bx bx-user-circle'></i> 游客登录
             </button>
         </form>
         

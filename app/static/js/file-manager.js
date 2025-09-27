@@ -67,7 +67,7 @@ class FileManager {
 
     setupSocketEvents() {
         this.socket.on('connect', () => {
-            this.setStatus('已连接到服务器', 'success');
+            // 删除连接消息显示，直接加载客户端
             this.loadAvailableClients();
         });
 

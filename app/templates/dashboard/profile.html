@@ -64,6 +64,17 @@
         color: var(--text-secondary);
     }
     
+    .user-role {
+        font-size: 14px;
+        color: var(--primary-color);
+        background: rgba(var(--primary-color-rgb), 0.1);
+        padding: 4px 12px;
+        border-radius: 12px;
+        display: inline-block;
+        margin-top: 8px;
+        font-weight: 500;
+    }
+    
     .nav-tabs {
         border-bottom: 2px solid var(--border-color);
         margin-bottom: 20px;
@@ -270,7 +281,7 @@
             <div class="profile-card">
                 <div class="profile-header">
                     <div class="avatar-container">
-                        <img src="{{ user.avatar or '/static/images/default-avatar.png' }}" alt="头像" class="avatar" id="avatarImg">
+                        <img src="{{ user.avatar or '/static/images/default-avatar.svg' }}" alt="头像" class="avatar" id="avatarImg">
                         <button class="avatar-upload" onclick="document.getElementById('avatarInput').click()">
                             <i class="fas fa-camera"></i>
                         </button>
@@ -278,18 +289,17 @@
                     </div>
                     <div class="profile-info">
                         <h3 id="displayUsername">{{ user.username or '未设置' }}</h3>
-                        <p id="displayPosition">{{ user.position or '未设置职位' }}</p>
-                        <p id="displayDepartment">{{ user.department or '未设置部门' }}</p>
+                        <p class="user-role" id="displayRole">{{ user.role_display() if user.role_display else '普通用户' }}</p>
                     </div>
                 </div>
                 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-number" id="loginCount">156</div>
+                        <div class="stat-number" id="loginCount">{{ login_count if login_count is not none else 0 }}</div>
                         <div class="stat-label">登录次数</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="lastLoginDays">2</div>
+                        <div class="stat-number" id="lastLoginDays">{{ last_login_days if last_login_days is not none else 0 }}</div>
                         <div class="stat-label">天前登录</div>
                     </div>
                 </div>
@@ -331,31 +341,7 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="phone">手机号</label>
-                                        <input type="tel" class="form-control" id="phone" value="{{ user.phone or '' }}">
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="department">部门</label>
-                                        <input type="text" class="form-control" id="department" value="{{ user.department or '' }}">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="position">职位</label>
-                                <input type="text" class="form-control" id="position" value="{{ user.position or '' }}">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="description">个人简介</label>
-                                <textarea class="form-control" id="description" rows="3" placeholder="介绍一下自己...">{{ user.description or '' }}</textarea>
-                            </div>
+
                             
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save"></i> 保存更改
@@ -443,6 +429,20 @@
                                 <i class="fas fa-save"></i> 保存安全设置
                             </button>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- 新增：连接码管理 -->
+                <div class="profile-card">
+                    <div class="form-section">
+                        <h4><i class="fas fa-link"></i> 连接码管理</h4>
+                        <p class="text-muted">下载客户端后，请在此查看或重置您的连接码用于客户端连接。出于安全考虑，连接码仅在重置后会显示一次。</p>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control" id="connectCodeInput" placeholder="连接码未显示，点击右侧按钮生成并显示" readonly>
+                            <button class="btn btn-outline-secondary" type="button" id="copyConnectCodeBtn" disabled>复制</button>
+                            <button class="btn btn-primary" type="button" id="rotateConnectCodeBtn"><i class="fas fa-sync-alt"></i> 重置并显示连接码</button>
+                        </div>
+                        <small class="text-muted">重置后旧码立即失效，新连接需使用新码；已连接客户端是否断开由系统设置决定。</small>
                     </div>
                 </div>
                 

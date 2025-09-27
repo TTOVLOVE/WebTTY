@@ -20,7 +20,7 @@ def upgrade():
     bind = op.get_bind()
     insp = sa.inspect(bind)
 
-    # ´´½¨ÖÐ¼ä±í£¨Èô²»´æÔÚ£©
+    # ï¿½ï¿½ï¿½ï¿½ï¿½Ð¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½
     if not insp.has_table('auth_code_device_map'):
         op.create_table(
             'auth_code_device_map',
@@ -36,7 +36,7 @@ def upgrade():
         op.create_index('ix_auth_code_device_map_auth_code_id', 'auth_code_device_map', ['auth_code_id'], unique=False)
         op.create_index('ix_auth_code_device_map_device_id', 'auth_code_device_map', ['device_id'], unique=True)
 
-    # ´Ó devices ±íÒÆ³ý¾ÉµÄ auth_code_id ÁÐ£¨Èô´æÔÚ£©
+    # ï¿½ï¿½ devices ï¿½ï¿½ï¿½Æ³ï¿½ï¿½Éµï¿½ auth_code_id ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½
     device_cols = [c['name'] if isinstance(c, dict) else c.name for c in insp.get_columns('devices')]
     if 'auth_code_id' in device_cols:
         with op.batch_alter_table('devices') as batch_op:
@@ -47,14 +47,14 @@ def downgrade():
     bind = op.get_bind()
     insp = sa.inspect(bind)
 
-    # »Ø¹ö devices.auth_code_id£¨ÈôÈ±Ê§£©
+    # ï¿½Ø¹ï¿½ devices.auth_code_idï¿½ï¿½ï¿½ï¿½È±Ê§ï¿½ï¿½
     device_cols = [c['name'] if isinstance(c, dict) else c.name for c in insp.get_columns('devices')]
     if 'auth_code_id' not in device_cols:
         with op.batch_alter_table('devices') as batch_op:
             batch_op.add_column(sa.Column('auth_code_id', sa.Integer(), nullable=True))
             batch_op.create_foreign_key(None, 'auth_codes', ['auth_code_id'], ['id'])
 
-    # É¾³ýÖÐ¼ä±í£¨Èô´æÔÚ£©
+    # É¾ï¿½ï¿½ï¿½Ð¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½
     if insp.has_table('auth_code_device_map'):
         try:
             op.drop_index('ix_auth_code_device_map_device_id', table_name='auth_code_device_map')

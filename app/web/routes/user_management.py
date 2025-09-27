@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, jsonify, request, current_app
 from flask_login import login_required, current_user
 from ...models import User, Role, SystemLog
 from ...extensions import db
+from ...utils.decorators import non_guest_required
 
 user_management_bp = Blueprint('user_management', __name__, url_prefix='/user-management')
 
@@ -23,6 +24,7 @@ def admin_required(f):
 
 @user_management_bp.route('/')
 @login_required
+@non_guest_required
 def user_management():
     """用户管理页面"""
     if not hasattr(current_user, 'role') or not current_user.is_administrator():
@@ -44,6 +46,7 @@ def user_management():
 @user_management_bp.route('/api/users')
 @login_required
 @admin_required
+@non_guest_required
 def get_users():
     """获取用户列表"""
     try:

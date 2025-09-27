@@ -1,10 +1,12 @@
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import request
+from flask_login import current_user
 import os
 import base64
 from ..utils.helpers import human_readable_size
 from ..services import client_manager
 from ..services.transfer_service import save_screenshot
+import logging
 
 # 一个临时存放上传数据的缓存
 upload_cache = {}
@@ -12,13 +14,21 @@ upload_cache = {}
 def init_socketio(socketio):
     """初始化Socket.IO事件处理器"""
     
-    # @socketio.on('connect')
-    # def handle_connect():
-    #     print(f"客户端连接: {request.sid}")
-    #
-    # @socketio.on('disconnect')
-    # def handle_disconnect():
-    #     print(f"客户端断开: {request.sid}")
+    @socketio.on('connect')
+    def handle_connect():
+        if current_user.is_authenticated:
+            join_room(current_user.id)
+            logging.info(f"Socket.IO connect: User {current_user.username} (ID: {current_user.id}, SID: {request.sid}) joined room {current_user.id}.")
+        else:
+            logging.warning(f"Socket.IO connect: Unauthenticated user with SID {request.sid} connected.")
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        if current_user.is_authenticated:
+            leave_room(current_user.id)
+            logging.info(f"Socket.IO disconnect: User {current_user.username} (ID: {current_user.id}, SID: {request.sid}) left room {current_user.id}.")
+        else:
+            logging.warning(f"Socket.IO disconnect: Unauthenticated user with SID {request.sid} disconnected.")
     
     @socketio.on('get_clients')
     def get_clients():
@@ -43,44 +53,70 @@ def init_socketio(socketio):
         try:
             # 延迟导入，避免模块循环
             from ..models import Client
+            
+            # 如果是管理员，则获取所有客户端
+            if current_user.is_authenticated and current_user.is_admin:
+                query = Client.query.all()
+            # 否则，只获取属于当前用户的客户端
+            elif current_user.is_authenticated:
+                query = Client.query.filter_by(owner_id=current_user.id).all()
+            else:
+                query = []
+
+            # 从数据库加载客户端
+            db_clients = {c.id: c for c in query}
+            
+            # 结合在线客户端信息
             for cid, info in client_manager.client_info.items():
-                # 复制以免修改原字典
-                datum = dict(info) if isinstance(info, dict) else {}
-                hostname = norm(datum.get('hostname'))
-                user = norm(datum.get('user'))
-                ip = extract_ip(datum.get('addr')) or norm(datum.get('ip') or datum.get('ip_address'))
-                # 如 hostname 缺失，尝试从数据库回填
-                if not hostname:
-                    try:
-                        db_client_id = datum.get('db_client_id')
-                        if db_client_id:
-                            c = Client.query.get(db_client_id)
-                        else:
-                            c = Client.query.filter_by(client_id=cid).first()
-                        if c and norm(getattr(c, 'hostname', None)):
-                            hostname = norm(c.hostname)
-                            datum['hostname'] = hostname
-                    except Exception:
-                        pass
-                # 计算显示名
-                display_name = hostname or user or ip or f"客户端 {cid}"
-                datum['display_name'] = display_name
-                clients[cid] = datum
-        except Exception:
-            # 失败则回退为原始结构
-            clients = {cid: info for cid, info in client_manager.client_info.items()}
+                db_client_id = info.get('db_client_id')
+                
+                # 检查此在线客户端是否应显示给当前用户
+                if db_client_id in db_clients:
+                    c = db_clients[db_client_id]
+                    datum = dict(info) if isinstance(info, dict) else {}
+                    hostname = norm(c.hostname) or norm(datum.get('hostname'))
+                    user = norm(datum.get('user'))
+                    ip = extract_ip(datum.get('addr')) or norm(c.ip_address)
+                    
+                    display_name = hostname or user or ip or f"客户端 {cid}"
+                    datum['display_name'] = display_name
+                    datum['owner_id'] = c.owner_id # 确保所有者ID存在
+                    clients[cid] = datum
+
+        except Exception as e:
+            logging.error(f"Error in get_clients for user {current_user.id if current_user.is_authenticated else 'Anonymous'}: {e}", exc_info=True)
+            clients = {}
         
+        logging.debug(f"Emitting clients_list for user {current_user.id if current_user.is_authenticated else 'Anonymous'} with {len(clients)} clients.")
         emit('clients_list', {'clients': clients})
     
     @socketio.on('send_command')
     def send_command(data):
         """发送命令到客户端"""
-        cid = data.get('target')
-        cmd = data.get('command')
+        target = data.get('target')  # 前端发送的是 'target'
+        command = data.get('command', {})  # 前端发送的命令在 'command' 对象中
+        action = command.get('action')
+        arg = command.get('arg')
+        
+        print(f"Received command data: {data}")
+        print(f"Parsed - target: {target}, action: {action}, arg: {arg}")
+        print(f"Available client_queues: {list(client_manager.client_queues.keys())}")
+        print(f"Available client_info: {list(client_manager.client_info.keys())}")
+        
+        if target is None or action is None:
+            emit('command_result', {'output': "无效的命令参数", 'is_error': True})
+            return
+            
+        # 使用字符串形式的 client_id，因为 client_manager 使用字符串键
+        cid = str(target)
+        
+        cmd = {'action': action, 'arg': arg}
         
         if cid in client_manager.client_queues:
             client_manager.client_queues[cid].put(cmd)
+            print(f"Command sent to client {cid}: {cmd}")
         else:
+            print(f"Client {cid} not found in client_queues")
             emit('command_result', {'output': f"客户端 {cid} 未连接", 'is_error': True})
     
     @socketio.on('send_batch_command')

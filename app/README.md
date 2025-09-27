@@ -449,3 +449,45 @@ python run_app.py
 ## 许可证
 
 本项目采用MIT许可证，详见LICENSE文件。
+
+## 任务总结（连接码模块与前端修复）
+
+本次工作围绕“连接码（Connect Code）”模块的后端完善与前端集成修复展开，并完成端到端联调与验证，具体如下：
+
+- 后端模块
+  - 路由蓝图与接口：connect_code 蓝图使用前缀 `/api/connect-codes`，提供以下接口：
+    - `POST /api/connect-codes/user/rotate`（需登录）：为当前用户重置连接码并返回明文与时间戳
+    - `POST /api/connect-codes/guest/ensure`：为访客会话创建占位连接码并下发 `guest_session_id` Cookie
+    - `POST /api/connect-codes/guest/rotate`：为当前访客会话重置连接码并返回明文与时间戳
+  - 未登录处理：统一由 LoginManager 的 `unauthorized_handler` 返回 401 JSON 响应，前端可感知并提示登录
+  - 模型与数据库：
+    - ConnectCode 字段完善：`code_hash`、`code_type`（user/guest）、`user_id`（FK）、`guest_session_id`、`is_active`、`last_rotated_at`、`last_used_at`
+    - Client 外键：`connect_code_id` 指向 `connect_codes.id`，用于在 TCP 连接期绑定客户端到连接码
+    - 迁移文件：`92bda8901d26_add_connect_code.py` 定义表结构与索引
+    - SQLite 兼容：在 `create_app` 中执行 `ensure_client_columns` 与 `ensure_connect_code_table` 以保证列/表存在
+  - TCP 服务器集成：
+    - 握手阶段校验 `connection_code`，使用 `check_password_hash` 与数据库中的 `ConnectCode` 进行校验
+    - 校验通过后持久化 `client.connect_code_id`，并在会话活跃时更新 `ConnectCode.last_used_at`
+  - 客户端与访客清理：
+    - 在 `app/__init__.py` 启动 `start_guest_cleanup` 守护线程
+    - `tasks/cleanup_worker.py` 定期清理过期访客连接码与孤立客户端，依据 `last_used_at` 与 `is_active`
+
+- 前端集成与修复
+  - 个人信息-安全设置集成“连接码管理”模块：支持重置、显示与复制明文连接码
+  - 修复 API 路径错误：将前端调用从 `/api/connect_code/rotate` 更正为 `/api/connect-codes/user/rotate`，解决 404 问题
+  - 在“客户端下载”页面新增提示文案，提升指引性
+
+- 联调与验证
+  - 启动 Flask 开发服务器，在 `/profile/` 与 `/client_download` 页面验证连接码管理与提示展示，无报错
+  - 终端日志确认 TCP 端口监听与开发环境提示正常输出
+
+- 接口速查
+  - `POST /api/connect-codes/user/rotate`
+  - `POST /api/connect-codes/guest/ensure`
+  - `POST /api/connect-codes/guest/rotate`
+
+- 生产化建议（可选优化）
+  - 将访客 Cookie 的 `secure=True` 并启用 HTTPS
+  - 用户连接码增加历史审计与可视化
+  - 管理员工具：连接码失效策略、批量清理与监控面板
+  - 对访客连接码设置更严格的过期与速率限制

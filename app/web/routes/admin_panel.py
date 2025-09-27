@@ -5,12 +5,14 @@
 
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
+from ...utils.decorators import non_guest_required
 
 # 创建管理面板主页面蓝图
 admin_panel_bp = Blueprint('admin_panel', __name__)
 
 @admin_panel_bp.route('/admin')
 @login_required
+@non_guest_required
 def admin_panel():
     """系统管理面板主页面"""
     # 检查用户权限

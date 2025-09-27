@@ -109,3 +109,34 @@
 </script>
 {% endblock %}
 
+
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-body">
+          <h3 class="card-title"><i class="fas fa-download"></i> 客户端下载</h3>
+          <p class="text-muted">请选择适合您操作系统的客户端进行下载与安装。</p>
+
+          <!-- 新增提示 -->
+          <div class="alert alert-info" role="alert">
+            下载客户端后请在个人信息-安全设置中查看连接码或者重置您的连接码以连接您的客户端
+          </div>
+
+          <div class="list-group">
+            <a href="/assets/download/client/windows" class="list-group-item list-group-item-action">
+              <i class="fab fa-windows"></i> Windows 客户端
+            </a>
+            <a href="/assets/download/client/macos" class="list-group-item list-group-item-action">
+              <i class="fab fa-apple"></i> macOS 客户端
+            </a>
+            <a href="/assets/download/client/linux" class="list-group-item list-group-item-action">
+              <i class="fab fa-linux"></i> Linux 客户端
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

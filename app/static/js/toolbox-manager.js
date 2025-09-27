@@ -18,7 +18,7 @@ class ToolboxManager {
 
   setupSocketEvents() {
     this.socket.on('connect', () => {
-      console.log('已连接到服务器');
+      // 删除连接消息显示
     });
 
     this.socket.on('disconnect', () => {

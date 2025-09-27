@@ -6,15 +6,22 @@ class ProfileManager {
 
     init() {
         this.bindEvents();
+        this.loadLoginStats();  // 添加加载登录统计
         this.loadSecuritySettings();
         this.loadActivityLog();
     }
 
     bindEvents() {
-        // 标签页切换
-        document.querySelectorAll('.nav-link').forEach(link => {
+        // 标签页切换（仅限于 profile 页面内的 nav-tabs）
+        document.querySelectorAll('.nav.nav-tabs .nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
-                this.switchTab(e.target.dataset.tab);
+                e.preventDefault(); // 阻止默认行为
+                const tabId = e.currentTarget.dataset.tab;
+                if (!tabId) {
+                    // 非标签页按钮，忽略
+                    return;
+                }
+                this.switchTab(tabId);
             });
         });
 
@@ -55,17 +62,35 @@ class ProfileManager {
     }
 
     switchTab(tabId) {
+        // 检查 tabId 是否有效
+        if (!tabId) {
+            console.error('switchTab: tabId is undefined or null');
+            return;
+        }
+
         // 更新导航标签状态
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
         });
-        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+        
+        const navLink = document.querySelector(`[data-tab="${tabId}"]`);
+        if (navLink) {
+            navLink.classList.add('active');
+        } else {
+            console.error(`switchTab: 找不到导航链接 [data-tab="${tabId}"]`);
+        }
 
         // 显示对应内容
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
-        document.getElementById(tabId).classList.add('active');
+        
+        const tabContent = document.getElementById(tabId);
+        if (tabContent) {
+            tabContent.classList.add('active');
+        } else {
+            console.error(`switchTab: 找不到标签内容 #${tabId}`);
+        }
 
         // 如果切换到活动记录标签页，刷新数据
         if (tabId === 'activity') {
@@ -77,10 +102,7 @@ class ProfileManager {
         const formData = {
             username: document.getElementById('username').value.trim(),
             email: document.getElementById('email').value.trim(),
-            phone: document.getElementById('phone').value.trim(),
-            department: document.getElementById('department').value.trim(),
-            position: document.getElementById('position').value.trim(),
-            description: document.getElementById('description').value.trim()
+            phone: document.getElementById('phone').value.trim()
         };
 
         // 基本验证
@@ -284,11 +306,66 @@ class ProfileManager {
                 document.getElementById('sessionTimeout').value = settings.session_timeout;
                 
                 // 更新安全信息
-                document.getElementById('passwordLastChanged').textContent = settings.password_last_changed;
-                document.getElementById('failedAttempts').textContent = settings.failed_login_attempts;
+                document.getElementById('passwordLastChanged').textContent = settings.password_last_changed || '未设置';
+                document.getElementById('failedAttempts').textContent = settings.failed_login_attempts || 0;
+                
+                // 更新账户状态和最后登录IP
+                const accountStatusEl = document.getElementById('accountStatus');
+                const lastLoginIpEl = document.getElementById('lastLoginIp');
+                if (accountStatusEl) accountStatusEl.textContent = settings.account_status || '正常';
+                if (lastLoginIpEl) lastLoginIpEl.textContent = settings.last_login_ip || '未知';
             }
         } catch (error) {
             console.error('加载安全设置错误:', error);
+        }
+    }
+
+    async loadLoginStats() {
+        try {
+            const response = await fetch('/profile/api/login-stats');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.stats || {};
+                
+                // 更新登录统计显示
+                const loginCountEl = document.getElementById('loginCount');
+                const lastLoginDaysEl = document.getElementById('lastLoginDays');
+                
+                if (loginCountEl) {
+                    loginCountEl.textContent = stats.total_logins ?? 0;
+                }
+                
+                if (lastLoginDaysEl) {
+                    if (typeof stats.last_login_days === 'number') {
+                        lastLoginDaysEl.textContent = stats.last_login_days;
+                    } else if (stats.last_login_iso) {
+                        const lastLoginDate = new Date(stats.last_login_iso);
+                        if (!isNaN(lastLoginDate)) {
+                            const now = new Date();
+                            const diffTime = Math.abs(now - lastLoginDate);
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            lastLoginDaysEl.textContent = diffDays;
+                        } else {
+                            lastLoginDaysEl.textContent = '-';
+                        }
+                    } else if (stats.last_login) {
+                        const lastLoginDate = new Date(stats.last_login);
+                        if (!isNaN(lastLoginDate)) {
+                            const now = new Date();
+                            const diffTime = Math.abs(now - lastLoginDate);
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            lastLoginDaysEl.textContent = diffDays;
+                        } else {
+                            lastLoginDaysEl.textContent = '-';
+                        }
+                    } else {
+                        lastLoginDaysEl.textContent = '-';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('加载登录统计错误:', error);
         }
     }
 
@@ -376,8 +453,6 @@ class ProfileManager {
     updateDisplayInfo(formData) {
         // 更新左侧显示信息
         document.getElementById('displayUsername').textContent = formData.username || '未设置';
-        document.getElementById('displayPosition').textContent = formData.position || '未设置职位';
-        document.getElementById('displayDepartment').textContent = formData.department || '未设置部门';
     }
 
     isValidEmail(email) {
@@ -413,3 +488,65 @@ class ProfileManager {
 document.addEventListener('DOMContentLoaded', function() {
     window.profileManager = new ProfileManager();
 });
+
+// 连接码管理交互逻辑
+(function() {
+  const rotateBtn = document.getElementById('rotateConnectCodeBtn');
+  const copyBtn = document.getElementById('copyConnectCodeBtn');
+  const input = document.getElementById('connectCodeInput');
+  if (!rotateBtn || !copyBtn || !input) return;
+
+  let lastShown = null; // 仅前端缓存一次
+
+  async function rotateAndShow() {
+    rotateBtn.disabled = true;
+    rotateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在重置...';
+    input.value = '';
+    copyBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/connect-codes/user/rotate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (resp.status === 401) {
+        // 未登录
+        alert('未登录或会话已过期，请重新登录后再重置连接码');
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data.message || ('重置失败，状态码 ' + resp.status));
+      }
+      // 后端约定：返回 { success: true, code: '明文连接码', code_id: <id> }
+      input.value = data.code || '';
+      lastShown = data.code || '';
+      copyBtn.disabled = !lastShown;
+      rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置并显示连接码';
+    } catch (err) {
+      console.error('rotate connect code error:', err);
+      alert('重置连接码失败：' + err.message);
+    } finally {
+      rotateBtn.disabled = false;
+      if (input.value === '') {
+        rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置并显示连接码';
+      }
+    }
+  }
+
+  function copyCode() {
+    if (!lastShown) return;
+    navigator.clipboard.writeText(lastShown).then(() => {
+      copyBtn.textContent = '已复制';
+      setTimeout(() => (copyBtn.textContent = '复制'), 2000);
+    }).catch((err) => {
+      console.error('copy failed:', err);
+      alert('复制失败，请手动选择并复制');
+    });
+  }
+
+  rotateBtn.addEventListener('click', rotateAndShow);
+  copyBtn.addEventListener('click', copyCode);
+})();

@@ -41,7 +41,22 @@ class RoleType(Enum):
     ADMIN = 'admin'
     USER = 'user'
 
+class ConnectCode(db.Model):
+    __tablename__ = 'connect_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    code_hash = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    guest_session_id = db.Column(db.String(64), nullable=True, index=True)
+    code_type = db.Column(db.String(8), nullable=False)  # 'user' | 'guest'
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_rotated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_used_at = db.Column(db.DateTime, nullable=True)
 
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'is_active', name='uq_user_active_code'),
+        db.UniqueConstraint('guest_session_id', 'is_active', name='uq_guest_active_code'),
+    )
 
 class User(db.Model, UserMixin):
     """用户表"""
@@ -72,6 +87,19 @@ class User(db.Model, UserMixin):
         
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        """将用户信息序列化为字典"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'role': self.role.name if self.role else None,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'avatar': getattr(self, 'avatar', '/static/images/default-avatar.svg')  # 假设有avatar字段
+        }
     
     def is_super_admin(self):
         """检查是否为超级管理员"""
@@ -90,6 +118,10 @@ class User(db.Model, UserMixin):
     def is_admin(self):
         """检查是否为管理员（包括超级管理员和普通管理员）"""
         return self.is_administrator()
+    
+    def is_guest(self):
+        """检查是否为游客用户"""
+        return self.role and self.role.name == 'guest'
     
     def is_manager(self):
         # 新枚举的 admin 等价旧的 manager
@@ -159,6 +191,9 @@ class Client(db.Model):
     """客户端表"""
     __tablename__ = 'clients'
     
+    # 连接码归属（用户码或游客码分组）
+    connect_code_id = db.Column(db.Integer, db.ForeignKey('connect_codes.id'), nullable=True, index=True)
+    connect_code = db.relationship('ConnectCode', foreign_keys=[connect_code_id])
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.String(64), unique=True, nullable=False)
     # 设备唯一标识字段
@@ -175,6 +210,7 @@ class Client(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
     owner = db.relationship('User', backref='owned_clients')
+    # 连接码关系已在上方声明
     logs = db.relationship('ClientLog', backref='client', lazy='dynamic')
     
     @staticmethod
@@ -255,3 +291,66 @@ class Device(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     owner = db.relationship('User', backref='devices')
+
+
+class UserLoginLog(db.Model):
+    """用户登录日志表"""
+    __tablename__ = 'user_login_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    login_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    logout_time = db.Column(db.DateTime, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)  # 支持IPv6
+    user_agent = db.Column(db.String(500), nullable=True)
+    device_info = db.Column(db.String(200), nullable=True)
+    login_status = db.Column(db.String(20), default='success', nullable=False)  # success, failed
+    failure_reason = db.Column(db.String(200), nullable=True)
+    session_duration = db.Column(db.Integer, nullable=True)  # 会话时长（秒）
+    
+    user = db.relationship('User', backref='login_logs')
+    
+    def __repr__(self):
+        return f'<UserLoginLog {self.user_id} at {self.login_time}>'
+
+
+class UserActivityLog(db.Model):
+    """用户活动日志表"""
+    __tablename__ = 'user_activity_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    activity_type = db.Column(db.String(50), nullable=False)  # profile_update, password_change, etc.
+    activity_description = db.Column(db.String(500), nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+    activity_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(20), default='success', nullable=False)  # success, failed
+    details = db.Column(db.Text, nullable=True)  # JSON格式的详细信息
+    
+    user = db.relationship('User', backref='activity_logs')
+    
+    def __repr__(self):
+        return f'<UserActivityLog {self.user_id}: {self.activity_type}>'
+
+
+class UserSecurityInfo(db.Model):
+    """用户安全信息表"""
+    __tablename__ = 'user_security_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    password_last_changed = db.Column('password_changed_at', db.DateTime, nullable=True)
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
+    last_failed_login = db.Column('last_failed_login_at', db.DateTime, nullable=True)
+    account_locked_until = db.Column(db.DateTime, nullable=True)
+    two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    login_notifications_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    session_timeout_minutes = db.Column(db.Integer, default=30, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    user = db.relationship('User', backref=db.backref('security_info', uselist=False))
+    
+    def __repr__(self):
+        return f'<UserSecurityInfo for user {self.user_id}>'

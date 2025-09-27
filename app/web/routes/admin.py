@@ -1,17 +1,18 @@
-﻿"""
+"""
 系统管理面板路由
 提供系统管理相关的API接口
 """
 
-from flask import Blueprint, jsonify, request, current_app, abort
+from flask import Blueprint, render_template, jsonify, request, current_app
 from flask_login import login_required, current_user
+from ...models import User, Role, SystemLog, Client
+from ...extensions import db
+from ...utils.decorators import non_guest_required
 import psutil
 import os
 import time
 import json
 from datetime import datetime, timedelta
-from ...models import User, Role, InvitationCode, SystemLog, Client
-from ...extensions import db
 
 # 创建管理员蓝图
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -32,6 +33,7 @@ def admin_required(f):
 @admin_bp.route('/system-info')
 @login_required
 @admin_required
+@non_guest_required
 def get_system_info():
     """获取系统信息"""
     try:
@@ -65,6 +67,7 @@ def get_system_info():
 @admin_bp.route('/clients')
 @login_required
 @admin_required
+@non_guest_required
 def get_clients():
     """获取客户端信息"""
     try:
