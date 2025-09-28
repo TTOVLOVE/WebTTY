@@ -174,7 +174,31 @@ def receive_thread(conn, client_id, app, addr, stop_event):
                         filename = data["file"]
                         content = base64.b64decode(data["data"])
                         os.makedirs(BaseConfig.DOWNLOADS_DIR, exist_ok=True)
-                        unique_filename = f"{client_id}_{int(time.time())}_{os.path.basename(filename)}"
+                        
+                        # 获取客户端信息，使用hostname作为文件名前缀
+                        client_prefix = client_id  # 默认使用client_id
+                        
+                        try:
+                            with app.app_context():
+                                db_client_id = client_manager.client_info.get(client_id, {}).get('db_client_id')
+                                
+                                if db_client_id:
+                                    from ..models import Client
+                                    client = Client.query.get(db_client_id)
+                                    if client and client.hostname:
+                                        # 清理hostname中的特殊字符，确保文件名安全
+                                        safe_hostname = "".join(c for c in client.hostname if c.isalnum() or c in ('-', '_')).rstrip()
+                                        if safe_hostname:  # 如果清理后不为空，使用hostname
+                                            client_prefix = safe_hostname
+                                        else:
+                                            client_prefix = f"Client_{client_id}"
+                                    else:
+                                        client_prefix = f"Client_{client_id}"
+                        except Exception as e:
+                            print(f"[警告] 获取客户端hostname失败: {e}")
+                            client_prefix = f"Client_{client_id}"
+                        
+                        unique_filename = f"{client_prefix}_{int(time.time())}_{os.path.basename(filename)}"
                         path = os.path.join(BaseConfig.DOWNLOADS_DIR, unique_filename)
                         with open(path, "wb") as f:
                             f.write(content)

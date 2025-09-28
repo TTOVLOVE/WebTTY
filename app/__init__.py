@@ -30,6 +30,7 @@ from .web.routes.admin import admin_bp
 from .web.routes.user_management import user_management_bp
 from .web.routes.vulnerability_scan import vulnerability_scan_bp
 from .web.routes.profile import profile_bp
+from .web.routes.recovery_api import recovery_api_bp
 
 # 创建登录管理器
 login_manager = LoginManager()
@@ -149,6 +150,7 @@ def create_app(config_name=None):
     app.register_blueprint(user_management_bp)
     app.register_blueprint(vulnerability_scan_bp)
     app.register_blueprint(profile_bp)
+    app.register_blueprint(recovery_api_bp)
     app.register_blueprint(connect_code_bp)
 
     
@@ -166,6 +168,20 @@ def create_app(config_name=None):
 
     # 启动 TCP RAT 服务线程（传入 app 实例）
     threading.Thread(target=start_tcp_server, args=(app,), daemon=True).start()
+
+    # 启动客户端状态恢复检查（延迟5秒以确保TCP服务器已启动）
+    def delayed_recovery_check():
+        import time
+        time.sleep(5)  # 等待TCP服务器完全启动
+        with app.app_context():
+            from .services.client_recovery import check_recovery_needed, recover_client_manager_state
+            if check_recovery_needed():
+                print("[启动] 检测到需要恢复客户端管理器状态")
+                recover_client_manager_state()
+            else:
+                print("[启动] 客户端管理器状态正常，无需恢复")
+    
+    threading.Thread(target=delayed_recovery_check, daemon=True).start()
 
     # 启动游客清理线程（从模块启动）
     start_guest_cleanup(app)

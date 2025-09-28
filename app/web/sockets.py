@@ -54,12 +54,14 @@ def init_socketio(socketio):
             # 延迟导入，避免模块循环
             from ..models import Client
             
-            # 如果是管理员，则获取所有客户端
-            if current_user.is_authenticated and current_user.is_admin:
-                query = Client.query.all()
-            # 否则，只获取属于当前用户的客户端
-            elif current_user.is_authenticated:
-                query = Client.query.filter_by(owner_id=current_user.id).all()
+            # 根据用户权限获取客户端
+            if current_user.is_authenticated:
+                if current_user.is_super_admin():
+                    # 超级管理员可以查看所有客户端
+                    query = Client.query.all()
+                else:
+                    # 普通用户只能查看自己的客户端
+                    query = Client.query.filter_by(owner_id=current_user.id).all()
             else:
                 query = []
 
@@ -73,15 +75,19 @@ def init_socketio(socketio):
                 # 检查此在线客户端是否应显示给当前用户
                 if db_client_id in db_clients:
                     c = db_clients[db_client_id]
-                    datum = dict(info) if isinstance(info, dict) else {}
-                    hostname = norm(c.hostname) or norm(datum.get('hostname'))
-                    user = norm(datum.get('user'))
-                    ip = extract_ip(datum.get('addr')) or norm(c.ip_address)
                     
-                    display_name = hostname or user or ip or f"客户端 {cid}"
-                    datum['display_name'] = display_name
-                    datum['owner_id'] = c.owner_id # 确保所有者ID存在
-                    clients[cid] = datum
+                    # 再次检查权限（双重保险）
+                    if current_user.is_authenticated and current_user.can_view_client(c):
+                        datum = dict(info) if isinstance(info, dict) else {}
+                        hostname = norm(c.hostname) or norm(datum.get('hostname'))
+                        user = norm(datum.get('user'))
+                        ip = extract_ip(datum.get('addr')) or norm(c.ip_address)
+                        
+                        display_name = hostname or user or ip or f"客户端 {cid}"
+                        datum['display_name'] = display_name
+                        datum['owner_id'] = c.owner_id
+                        datum['can_operate'] = current_user.can_operate_client(c)  # 添加操作权限标识
+                        clients[cid] = datum
 
         except Exception as e:
             logging.error(f"Error in get_clients for user {current_user.id if current_user.is_authenticated else 'Anonymous'}: {e}", exc_info=True)
@@ -98,26 +104,62 @@ def init_socketio(socketio):
         action = command.get('action')
         arg = command.get('arg')
         
-        print(f"Received command data: {data}")
-        print(f"Parsed - target: {target}, action: {action}, arg: {arg}")
+        # 权限检查：验证用户是否有权限操作该客户端
+        if current_user.is_authenticated:
+            try:
+                from ..models import Client
+                # 通过client_info获取db_client_id
+                client_info = client_manager.client_info.get(target)
+                if client_info:
+                    db_client_id = client_info.get('db_client_id')
+                    if db_client_id:
+                        client = Client.query.get(db_client_id)
+                        if client and not current_user.can_operate_client(client):
+                            emit('command_response', {
+                                'client_id': target,
+                                'error': '权限不足：您无权操作此客户端'
+                            })
+                            return
+            except Exception as e:
+                logging.error(f"Error checking client permissions: {e}")
+                emit('command_response', {
+                    'client_id': target,
+                    'error': '权限验证失败'
+                })
+                return
+        
         print(f"Available client_queues: {list(client_manager.client_queues.keys())}")
         print(f"Available client_info: {list(client_manager.client_info.keys())}")
         
-        if target is None or action is None:
-            emit('command_result', {'output': "无效的命令参数", 'is_error': True})
+        if target not in client_manager.client_queues:
+            emit('command_response', {
+                'client_id': target,
+                'error': f'客户端 {target} 未连接'
+            })
             return
+        
+        try:
+            # 构造命令
+            cmd = {
+                'action': action,
+                'arg': arg
+            }
             
-        # 使用字符串形式的 client_id，因为 client_manager 使用字符串键
-        cid = str(target)
-        
-        cmd = {'action': action, 'arg': arg}
-        
-        if cid in client_manager.client_queues:
-            client_manager.client_queues[cid].put(cmd)
-            print(f"Command sent to client {cid}: {cmd}")
-        else:
-            print(f"Client {cid} not found in client_queues")
-            emit('command_result', {'output': f"客户端 {cid} 未连接", 'is_error': True})
+            # 发送到客户端队列
+            client_manager.client_queues[target].put(cmd)
+            
+            # 发送确认响应
+            emit('command_response', {
+                'client_id': target,
+                'status': 'sent',
+                'command': cmd
+            })
+            
+        except Exception as e:
+            emit('command_response', {
+                'client_id': target,
+                'error': str(e)
+            })
     
     @socketio.on('send_batch_command')
     def send_batch_command(data):

@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, send_file, current_app
-from flask_login import login_required
+from flask_login import login_required, current_user
 import os
 from datetime import datetime
 from ...utils.helpers import human_readable_size
@@ -123,12 +123,36 @@ def file_manager():
 @assets_bp.route('/downloads')
 @login_required
 def downloads():
-    """下载管理页面"""
-    downloads_dir = current_app.config.get('DOWNLOADS_DIR', 'downloads')
-    files = []
+    """下载页面 - 只显示用户有权限的文件"""
+    from ...models import Client
     
-    if os.path.exists(downloads_dir):
-        for filename in os.listdir(downloads_dir):
+    downloads_dir = current_app.config.get('DOWNLOADS_DIR', 'downloads')
+    if not os.path.exists(downloads_dir):
+        os.makedirs(downloads_dir)
+    
+    files = []
+    for filename in os.listdir(downloads_dir):
+        # 检查文件权限
+        has_permission = False
+        
+        # 从文件名中提取客户端ID
+        parts = filename.split('_', 2)
+        if len(parts) >= 2:
+            try:
+                client_id = int(parts[0])
+                client = Client.query.get(client_id)
+                if client and current_user.can_view_client(client):
+                    has_permission = True
+            except (ValueError, TypeError):
+                # 如果无法解析客户端ID，只允许超级管理员查看
+                if current_user.is_super_admin():
+                    has_permission = True
+        else:
+            # 没有客户端ID前缀的文件，只允许超级管理员查看
+            if current_user.is_super_admin():
+                has_permission = True
+        
+        if has_permission:
             file_path = os.path.join(downloads_dir, filename)
             if os.path.isfile(file_path):
                 stat = os.stat(file_path)
@@ -147,34 +171,130 @@ def downloads():
 @assets_bp.route('/screenshots')
 @login_required
 def screenshots():
-    """截图管理页面"""
+    """截图页面 - 只显示用户有权限的截图"""
+    from ...models import Client
+    
     downloads_dir = current_app.config.get('DOWNLOADS_DIR', 'downloads')
     screenshots = []
     
     if os.path.exists(downloads_dir):
-        # 查找截图文件（假设截图文件名包含screenshot或png/jpg等图片扩展名）
-        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
+        image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']
+        
         for filename in os.listdir(downloads_dir):
+            # 检查是否为图片文件
             if any(filename.lower().endswith(ext) for ext in image_extensions) or 'screenshot' in filename.lower():
-                file_path = os.path.join(downloads_dir, filename)
-                if os.path.isfile(file_path):
-                    stat = os.stat(file_path)
-                    screenshots.append({
-                        'name': filename,
-                        'url': f'/downloads/{filename}',
-                        'modified_time': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
-                    })
+                # 检查文件权限
+                has_permission = False
+                
+                # 尝试从文件名中提取客户端信息
+                # 新格式: hostname_timestamp_filename 或 Client_ID_timestamp_filename
+                # 旧格式: ID_timestamp_filename
+                parts = filename.split('_', 2)
+                if len(parts) >= 2:
+                    try:
+                        # 先尝试按旧格式解析（纯数字ID）
+                        client_id = int(parts[0])
+                        client = Client.query.get(client_id)
+                        if client and current_user.can_view_client(client):
+                            has_permission = True
+                    except (ValueError, TypeError):
+                        # 如果第一部分不是数字，可能是新格式的hostname
+                        # 尝试通过hostname查找客户端
+                        hostname_part = parts[0]
+                        
+                        # 如果是 Client_ID 格式
+                        if hostname_part.startswith('Client_'):
+                            try:
+                                client_id = int(hostname_part.split('_')[1])
+                                client = Client.query.get(client_id)
+                                if client and current_user.can_view_client(client):
+                                    has_permission = True
+                            except (ValueError, IndexError):
+                                pass
+                        else:
+                            # 通过hostname查找客户端
+                            client = Client.query.filter_by(hostname=hostname_part).first()
+                            if client and current_user.can_view_client(client):
+                                has_permission = True
+                        
+                        # 如果找不到对应客户端，只允许超级管理员查看
+                        if not has_permission and current_user.is_super_admin():
+                            has_permission = True
+                else:
+                    # 没有客户端标识的截图，只允许超级管理员查看
+                    if current_user.is_super_admin():
+                        has_permission = True
+                
+                if has_permission:
+                    file_path = os.path.join(downloads_dir, filename)
+                    if os.path.isfile(file_path):
+                        stat = os.stat(file_path)
+                        screenshots.append({
+                            'name': filename,
+                            'url': f'/downloads/{filename}',
+                            'modified_time': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                        })
     
-    # 按修改时间排序，最新的在前面
     screenshots.sort(key=lambda x: x['modified_time'], reverse=True)
-    
     return render_template('assets/screenshot_gallery.html', screenshots=screenshots)
 
 @assets_bp.route('/downloads/<filename>')
 @login_required
 def download_file(filename):
-    """下载文件"""
+    """下载文件 - 检查用户权限"""
+    from ...models import Client
+    
     downloads_dir = current_app.config.get('DOWNLOADS_DIR', 'downloads')
+    file_path = os.path.join(downloads_dir, filename)
+    
+    if not os.path.exists(file_path):
+        abort(404)
+    
+    # 检查文件权限
+    has_permission = False
+    
+    # 尝试从文件名中提取客户端信息
+    # 新格式: hostname_timestamp_filename 或 Client_ID_timestamp_filename
+    # 旧格式: ID_timestamp_filename
+    parts = filename.split('_', 2)
+    if len(parts) >= 2:
+        try:
+            # 先尝试按旧格式解析（纯数字ID）
+            client_id = int(parts[0])
+            client = Client.query.get(client_id)
+            if client and current_user.can_view_client(client):
+                has_permission = True
+        except (ValueError, TypeError):
+            # 如果第一部分不是数字，可能是新格式的hostname
+            # 尝试通过hostname查找客户端
+            hostname_part = parts[0]
+            
+            # 如果是 Client_ID 格式
+            if hostname_part.startswith('Client_'):
+                try:
+                    client_id = int(hostname_part.split('_')[1])
+                    client = Client.query.get(client_id)
+                    if client and current_user.can_view_client(client):
+                        has_permission = True
+                except (ValueError, IndexError):
+                    pass
+            else:
+                # 通过hostname查找客户端
+                client = Client.query.filter_by(hostname=hostname_part).first()
+                if client and current_user.can_view_client(client):
+                    has_permission = True
+            
+            # 如果找不到对应客户端，只允许超级管理员查看
+            if not has_permission and current_user.is_super_admin():
+                has_permission = True
+    else:
+        # 没有客户端标识的文件，只允许超级管理员查看
+        if current_user.is_super_admin():
+            has_permission = True
+    
+    if not has_permission:
+        abort(403)
+    
     return send_from_directory(downloads_dir, filename)
 
 @assets_bp.route('/api/files/<client_id>')

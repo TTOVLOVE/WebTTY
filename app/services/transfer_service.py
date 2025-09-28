@@ -9,11 +9,25 @@ def save_screenshot(client_id, filename, image_data):
     """
     保存截图到服务器本地
     """
+    from ..models import Client
+    
     os.makedirs(BaseConfig.DOWNLOADS_DIR, exist_ok=True)
 
-    # 创建唯一的文件名
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    safe_filename = f"{client_id}_{timestamp}_{filename}"
+    # 获取客户端信息，使用hostname作为文件名前缀
+    client = Client.query.get(client_id)
+    if client and client.hostname:
+        # 清理hostname中的特殊字符，确保文件名安全
+        safe_hostname = "".join(c for c in client.hostname if c.isalnum() or c in ('-', '_')).rstrip()
+        if not safe_hostname:  # 如果清理后为空，使用默认名称
+            safe_hostname = f"Client_{client_id}"
+        client_prefix = safe_hostname
+    else:
+        # 如果没有hostname或客户端不存在，使用默认格式
+        client_prefix = f"Client_{client_id}"
+
+    # 创建唯一的文件名，保持与其他地方一致的时间戳格式
+    timestamp = int(time.time())
+    safe_filename = f"{client_prefix}_{timestamp}_{filename}"
 
     file_path = os.path.join(BaseConfig.DOWNLOADS_DIR, safe_filename)
 

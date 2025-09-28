@@ -493,10 +493,72 @@ document.addEventListener('DOMContentLoaded', function() {
 (function() {
   const rotateBtn = document.getElementById('rotateConnectCodeBtn');
   const copyBtn = document.getElementById('copyConnectCodeBtn');
+  const viewBtn = document.getElementById('viewConnectCodeBtn');
   const input = document.getElementById('connectCodeInput');
   if (!rotateBtn || !copyBtn || !input) return;
 
   let lastShown = null; // 仅前端缓存一次
+
+  // 页面加载时检查连接码状态
+  async function checkCodeStatus() {
+    try {
+      const resp = await fetch('/api/connect-codes/user/status', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (resp.status === 401) {
+        // 未登录，不处理
+        return;
+      }
+      const data = await resp.json();
+      if (resp.ok && data.exists) {
+        // 连接码已存在，显示查看按钮
+        input.placeholder = data.message || '连接码已存在，点击查看按钮显示';
+        if (viewBtn) viewBtn.style.display = 'inline-block';
+        rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置连接码';
+      } else {
+        // 连接码不存在，隐藏查看按钮
+        input.placeholder = data.message || '尚未生成连接码，点击重置按钮生成新的连接码';
+        if (viewBtn) viewBtn.style.display = 'none';
+        rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 生成连接码';
+      }
+    } catch (err) {
+      console.error('check connect code status error:', err);
+      // 静默失败，保持默认状态
+    }
+  }
+
+  async function viewConnectCode() {
+    try {
+      const resp = await fetch('/api/connect-codes/user/view', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (resp.status === 401) {
+        alert('未登录或会话已过期，请重新登录后再查看连接码');
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        input.value = data.code || '';
+        lastShown = data.code || '';
+        copyBtn.disabled = !lastShown;
+        if (window.profileManager) {
+          window.profileManager.showAlert('连接码已显示', 'success');
+        }
+      } else {
+        throw new Error(data.message || ('查看失败，状态码 ' + resp.status));
+      }
+    } catch (err) {
+      console.error('view connect code error:', err);
+      alert('查看连接码失败：' + err.message);
+    }
+  }
 
   async function rotateAndShow() {
     rotateBtn.disabled = true;
@@ -524,14 +586,19 @@ document.addEventListener('DOMContentLoaded', function() {
       input.value = data.code || '';
       lastShown = data.code || '';
       copyBtn.disabled = !lastShown;
-      rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置并显示连接码';
+      rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置连接码';
+      // 重新检查状态以更新UI
+      checkCodeStatus();
+      if (window.profileManager) {
+        window.profileManager.showAlert('连接码已重置', 'success');
+      }
     } catch (err) {
       console.error('rotate connect code error:', err);
       alert('重置连接码失败：' + err.message);
     } finally {
       rotateBtn.disabled = false;
       if (input.value === '') {
-        rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置并显示连接码';
+        rotateBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 重置连接码';
       }
     }
   }
@@ -547,6 +614,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // 页面加载时检查状态
+  checkCodeStatus();
+
+  if (viewBtn) {
+    viewBtn.addEventListener('click', viewConnectCode);
+  }
   rotateBtn.addEventListener('click', rotateAndShow);
   copyBtn.addEventListener('click', copyCode);
 })();

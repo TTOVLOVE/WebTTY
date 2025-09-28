@@ -438,8 +438,9 @@
                         <h4><i class="fas fa-link"></i> 连接码管理</h4>
                         <p class="text-muted">下载客户端后，请在此查看或重置您的连接码用于客户端连接。出于安全考虑，连接码仅在重置后会显示一次。</p>
                         <div class="input-group mb-2">
-                            <input type="text" class="form-control" id="connectCodeInput" placeholder="连接码未显示，点击右侧按钮生成并显示" readonly>
+                            <input type="text" class="form-control" id="connectCodeInput" placeholder="连接码未显示，点击右侧按钮查看或生成" readonly>
                             <button class="btn btn-outline-secondary" type="button" id="copyConnectCodeBtn" disabled>复制</button>
+                            <button class="btn btn-success" type="button" id="viewConnectCodeBtn" style="display: none;"><i class="fas fa-eye"></i> 查看连接码</button>
                             <button class="btn btn-primary" type="button" id="rotateConnectCodeBtn"><i class="fas fa-sync-alt"></i> 重置并显示连接码</button>
                         </div>
                         <small class="text-muted">重置后旧码立即失效，新连接需使用新码；已连接客户端是否断开由系统设置决定。</small>

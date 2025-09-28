@@ -129,6 +129,28 @@ class User(db.Model, UserMixin):
             return True
         return bool(getattr(self, 'role', None) and self.role.name == 'manager')
     
+    def can_view_client(self, client):
+        """检查用户是否可以查看指定客户端"""
+        if self.is_super_admin():
+            return True  # 超级管理员可以查看所有客户端
+        return client.owner_id == self.id  # 普通用户只能查看自己的客户端
+    
+    def can_operate_client(self, client):
+        """检查用户是否可以操作指定客户端"""
+        # 客户端所有者可以操作
+        if client.owner_id == self.id:
+            return True
+        
+        # 检查是否通过该用户的连接码连接的客户端
+        if client.connect_code and client.connect_code.user_id == self.id:
+            return True
+            
+        # 超级管理员可以操作所有客户端（但在UI上可以区分显示）
+        if self.is_super_admin():
+            return True
+            
+        return False
+    
     def role_display(self):
         """统一输出角色字符串，用于模板/日志展示"""
         if hasattr(self, 'role_type') and self.role_type:

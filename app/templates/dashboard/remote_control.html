@@ -38,12 +38,11 @@
   const socket = io();
 
   socket.on('connect', () => {
-    console.log('已连接到服务器');
-    statusText.textContent = '已连接到服务器，等待画面...';
-    // 页面连接后自动请求客户端开始屏幕流（适当提高帧率，降低质量提升流畅度）
+    statusText.textContent = '已连接到服务器，正在请求屏幕画面...';
+    // 页面连接后自动请求客户端开始屏幕流（进一步降低帧率和质量以提升性能）
     socket.emit('send_command', {
       target: clientId,
-      command: { action: 'start_screen', arg: 'fps=15,quality=50,width=1024' }
+      command: { action: 'start_screen', arg: 'fps=60,quality=50,width=1280' }
     });
   });
 

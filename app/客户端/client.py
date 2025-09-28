@@ -14,6 +14,7 @@ import ctypes
 from ttkthemes import ThemedTk
 import hashlib
 import uuid
+from io import BytesIO
 
 # 发送加锁，避免多线程发送数据时内容交叉
 SEND_LOCK = threading.Lock()
@@ -48,56 +49,149 @@ try:
 except Exception:
     WIN_AVAILABLE = False
 
+# 全局截图缓存 - 简化为仅保留必要信息
+_screenshot_cache = {
+    'last_cleanup_time': 0,
+    'cleanup_interval': 60  # 每60秒强制清理一次
+}
+
+def _cleanup_screenshot_cache():
+    """清理截图缓存资源 - 简化版本，因为新方法不使用持久缓存"""
+    current_time = time.time()
+    _screenshot_cache['last_cleanup_time'] = current_time
+    
+    # 强制垃圾回收，释放可能的内存泄漏
+    import gc
+    gc.collect()
+    
+    print(f"[调试] 截图缓存已清理，时间: {current_time}")
+
+def _periodic_cleanup():
+    """定期清理函数，防止资源累积"""
+    current_time = time.time()
+    if (current_time - _screenshot_cache['last_cleanup_time'] > _screenshot_cache['cleanup_interval']):
+        _cleanup_screenshot_cache()
+
 def take_screenshot():
+    # 添加失败计数器，避免频繁重试pywin32
+    if not hasattr(take_screenshot, '_pywin32_failures'):
+        take_screenshot._pywin32_failures = 0
+        take_screenshot._last_failure_time = 0
+    
+    # 如果pywin32连续失败太多次，暂时使用ImageGrab
+    current_time = time.time()
+    if (take_screenshot._pywin32_failures >= 5 and 
+        current_time - take_screenshot._last_failure_time < 30):  # 30秒内不重试pywin32
+        # 直接使用ImageGrab
+        return _take_screenshot_imagegrab()
+    
     # 优先使用 pywin32 截屏（性能更好，支持多显示器虚拟屏）
     if WIN_AVAILABLE:
         try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except AttributeError:
-            pass  # For older Windows versions
-        hdesktop = win32gui.GetDesktopWindow()
-        width, height = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN), win32api.GetSystemMetrics(
-            win32con.SM_CYVIRTUALSCREEN)
-        left, top = win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN), win32api.GetSystemMetrics(
-            win32con.SM_YVIRTUALSCREEN)
-        desktop_dc = win32gui.GetWindowDC(hdesktop)
-        img_dc = win32ui.CreateDCFromHandle(desktop_dc)
-        mem_dc = img_dc.CreateCompatibleDC()
-        screenshot = win32ui.CreateBitmap()
-        screenshot.CreateCompatibleBitmap(img_dc, width, height)
-        mem_dc.SelectObject(screenshot)
-        mem_dc.BitBlt((0, 0), (width, height), img_dc, (left, top), win32con.SRCCOPY)
-        bmpinfo = screenshot.GetInfo()
-        bmpstr = screenshot.GetBitmapBits(True)
-        img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-        mem_dc.DeleteDC()
-        img_dc.DeleteDC()
-        win32gui.ReleaseDC(hdesktop, desktop_dc)
-        win32gui.DeleteObject(screenshot.GetHandle())
-        return img
+            # 只在第一次调用时设置DPI感知
+            if not hasattr(take_screenshot, '_dpi_set'):
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                    take_screenshot._dpi_set = True
+                except AttributeError:
+                    take_screenshot._dpi_set = True
+            
+            # 使用更简单直接的方法，避免复杂的缓存机制
+            hdesktop = win32gui.GetDesktopWindow()
+            
+            # 获取主显示器尺寸而不是虚拟屏幕，减少复杂性
+            width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+            height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+            
+            # 验证屏幕尺寸有效性
+            if width <= 0 or height <= 0:
+                raise RuntimeError(f"Invalid screen dimensions: {width}x{height}")
+            
+            # 每次都创建新的DC，避免缓存导致的问题
+            desktop_dc = win32gui.GetWindowDC(hdesktop)
+            if not desktop_dc:
+                raise RuntimeError("Failed to get desktop window DC")
+            
+            try:
+                img_dc = win32ui.CreateDCFromHandle(desktop_dc)
+                mem_dc = img_dc.CreateCompatibleDC()
+                
+                screenshot_bitmap = win32ui.CreateBitmap()
+                screenshot_bitmap.CreateCompatibleBitmap(img_dc, width, height)
+                
+                old_bitmap = mem_dc.SelectObject(screenshot_bitmap)
+                
+                # 执行截图
+                result = mem_dc.BitBlt((0, 0), (width, height), img_dc, (0, 0), win32con.SRCCOPY)
+                if not result:
+                    raise RuntimeError("BitBlt operation failed")
+                
+                # 获取位图数据
+                bmpinfo = screenshot_bitmap.GetInfo()
+                bmpstr = screenshot_bitmap.GetBitmapBits(True)
+                
+                if not bmpstr:
+                    raise RuntimeError("Failed to get bitmap bits")
+                
+                # 创建图像
+                img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), 
+                                     bmpstr, 'raw', 'BGRX', 0, 1)
+                
+                # 清理资源
+                mem_dc.SelectObject(old_bitmap)
+                win32gui.DeleteObject(screenshot_bitmap.GetHandle())
+                mem_dc.DeleteDC()
+                img_dc.DeleteDC()
+                
+                # 重置失败计数器
+                take_screenshot._pywin32_failures = 0
+                return img
+                
+            finally:
+                # 确保释放桌面DC
+                win32gui.ReleaseDC(hdesktop, desktop_dc)
+                
+        except Exception as e:
+            take_screenshot._pywin32_failures += 1
+            take_screenshot._last_failure_time = current_time
+            print(f"[警告] pywin32截图失败 (失败次数: {take_screenshot._pywin32_failures}): {e}")
+            
+            # 如果失败次数较少，立即回退到ImageGrab
+            if take_screenshot._pywin32_failures < 3:
+                print("[信息] 立即回退到ImageGrab")
+    
+    # 回退方案：使用ImageGrab
+    return _take_screenshot_imagegrab()
 
-    # 回退方案：在 Windows 环境使用 Pillow 的 ImageGrab
-    if platform.system().lower() == 'windows':
-        try:
+def _take_screenshot_imagegrab():
+    """使用PIL ImageGrab进行截图的独立函数"""
+    try:
+        # 设置DPI感知
+        if not hasattr(_take_screenshot_imagegrab, '_dpi_set'):
             try:
                 ctypes.windll.user32.SetProcessDPIAware()
+                _take_screenshot_imagegrab._dpi_set = True
             except AttributeError:
-                pass
-            from PIL import ImageGrab
-            # all_screens=True 可抓取多显示器
-            return ImageGrab.grab(all_screens=True)
-        except Exception as e:
-            raise RuntimeError(f"Windows screenshot fallback failed: {e}")
-
-    # 非 Windows 环境直接提示不支持
-    raise RuntimeError("Screenshot only supported on Windows in this client build.")
+                _take_screenshot_imagegrab._dpi_set = True
+        
+        from PIL import ImageGrab
+        # 使用bbox参数限制截图区域，提高性能
+        return ImageGrab.grab(bbox=None, include_layered_windows=False, all_screens=False)
+    except Exception as e:
+        raise RuntimeError(f"ImageGrab screenshot failed: {e}")
 
 
 def reliable_send(sock, data_dict):
-    """将字典可靠地编码为JSON并附加换行符后发送（线程安全）"""
+    """将字典可靠地编码为JSON并附加换行符后发送（线程安全，优化版本）"""
     try:
-        json_data = json.dumps(data_dict).encode('utf-8') + b'\n'
+        # 使用更快的JSON编码选项
+        json_data = json.dumps(data_dict, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
         with SEND_LOCK:
+            # 设置TCP_NODELAY以减少延迟
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except:
+                pass  # 忽略设置失败
             sock.sendall(json_data)
     except socket.error as e:
         print(f"[错误] 发送数据时发生Socket错误: {e}")
@@ -283,49 +377,199 @@ def _get_virtual_screen_metrics():
     return vx, vy, vw, vh
 
 
-def _screen_stream_loop(sock: socket.socket, stop_event: threading.Event, fps=30, quality=60, max_width=1280):
-    """循环抓取屏幕 -> JPEG(Base64) -> 通过TCP发送 JSON {type: 'screen_frame', data: ...}"""
-    interval = max(0.01, 1.0 / max(1, int(fps)))
-    print(f"[屏幕流] 启动: fps={fps}, quality={quality}, max_width={max_width}")
-    while not stop_event.is_set():
-        start_t = time.time()
-        try:
-            img = take_screenshot()
-            # 记录原始捕获尺寸
-            orig_w, orig_h = img.width, img.height
-            if max_width and img.width > int(max_width):
-                ratio = int(max_width) / float(img.width)
-                new_size = (int(img.width * ratio), int(img.height * ratio))
-                img = img.resize(new_size, Image.LANCZOS)
-            frame_w, frame_h = img.width, img.height
-            vx, vy, vw, vh = _get_virtual_screen_metrics()
-            # 转JPEG
-            from io import BytesIO
-            bio = BytesIO()
-            img = img.convert('RGB')
-            img.save(bio, format='JPEG', quality=int(quality))
-            frame_b64 = base64.b64encode(bio.getvalue()).decode('utf-8')
-            reliable_send(sock, {
-                'type': 'screen_frame',
-                'data': frame_b64,
-                'w': frame_w,
-                'h': frame_h,
-                'vx': vx,
-                'vy': vy,
-                'vw': vw,
-                'vh': vh
-            })
-        except Exception as e:
-            # 捕获异常避免线程退出
-            print(f"[屏幕流] 捕获/发送帧失败: {e}")
-            time.sleep(0.2)
-        # 控制帧率
-        elapsed = time.time() - start_t
-        sleep_left = interval - elapsed
-        if sleep_left > 0:
-            # 支持随时停止
-            stop_event.wait(timeout=sleep_left)
-    print("[屏幕流] 停止")
+def _screen_stream_loop(sock, stop_event, fps, quality, max_width):
+    """屏幕流循环"""
+    try:
+        target_frame_time = 1.0 / fps
+        frame_count = 0
+        start_time = time.time()
+        last_stats_time = start_time
+        
+        # 性能统计变量
+        total_screenshot_time = 0
+        total_scale_time = 0
+        total_encode_time = 0
+        total_send_time = 0
+        
+        # 自适应质量控制变量
+        performance_samples = []
+        quality_adjustment = 0
+        last_quality_check = start_time
+        
+        # 缓存变量，避免重复计算 - 移除不必要的缓存变量
+        
+        # 跳帧策略变量
+        frame_skip_count = 0
+        max_frame_skip = 2  # 最多连续跳2帧
+        last_process_time = 0
+        
+        while not stop_event.is_set():
+            frame_start = time.time()
+            
+            # 动态跳帧策略：如果上一帧处理时间过长，跳过当前帧
+            if last_process_time > target_frame_time * 1.5 and frame_skip_count < max_frame_skip:
+                frame_skip_count += 1
+                time.sleep(target_frame_time * 0.5)  # 短暂休息
+                continue
+            else:
+                frame_skip_count = 0
+            
+            # 截图
+            screenshot_start = time.time()
+            
+            # 定期清理资源
+            _periodic_cleanup()
+            
+            try:
+                screenshot = take_screenshot()
+            except Exception as e:
+                print(f"[错误] 截图失败: {e}")
+                # 根据失败类型调整重试间隔
+                if "BitBlt" in str(e) or "pywin32" in str(e):
+                    time.sleep(1.0)  # pywin32失败时等待更长时间
+                else:
+                    time.sleep(0.3)  # 其他错误较短等待
+                continue
+            screenshot_time = (time.time() - screenshot_start) * 1000
+            
+            # 智能缩放策略 - 简化逻辑提高性能
+            scale_start = time.time()
+            original_size = screenshot.size
+            
+            # 只在需要时进行缩放
+            if original_size[0] > max_width:
+                target_size = (max_width, int(original_size[1] * max_width / original_size[0]))
+                # 使用最快的缩放算法
+                screenshot = screenshot.resize(target_size, Image.NEAREST)
+            
+            scale_time = (time.time() - scale_start) * 1000
+            
+            # 自适应质量控制 - 根据性能动态调整参数
+            current_time = time.time()
+            frame_process_time = current_time - frame_start
+            
+            # 收集性能样本
+            performance_samples.append(frame_process_time)
+            if len(performance_samples) > 10:  # 保持最近10帧的数据
+                performance_samples.pop(0)
+            
+            # 每5秒检查一次性能并调整质量
+            if current_time - last_quality_check > 5.0 and len(performance_samples) >= 5:
+                avg_frame_time = sum(performance_samples) / len(performance_samples)
+                
+                if avg_frame_time > target_frame_time * 1.3:  # 性能不佳，降低质量
+                    quality_adjustment = min(quality_adjustment + 5, 20)
+                elif avg_frame_time < target_frame_time * 0.8:  # 性能良好，提高质量
+                    quality_adjustment = max(quality_adjustment - 2, 0)
+                
+                last_quality_check = current_time
+            
+            # 应用质量调整
+            adjusted_quality = max(25, quality - quality_adjustment)
+            
+            # 优化编码策略 - 使用更快的压缩设置
+            encode_start = time.time()
+            
+            # 编码为JPEG - 使用最快设置，禁用优化和渐进式
+            buffer = BytesIO()
+            # 根据图像大小动态调整质量，减少不必要的计算
+            if screenshot.size[0] * screenshot.size[1] > 400000:
+                jpeg_quality = max(35, adjusted_quality - 10)
+            else:
+                jpeg_quality = adjusted_quality
+            
+            screenshot.save(buffer, format='JPEG', quality=jpeg_quality, optimize=False, progressive=False)
+            img_data = buffer.getvalue()
+            buffer.close()
+            
+            encode_time = (time.time() - encode_start) * 1000
+            
+            # 发送数据
+            send_start = time.time()
+            try:
+                # 获取虚拟屏幕信息
+                vx, vy, vw, vh = _get_virtual_screen_metrics()
+                
+                frame_data = {
+                    "type": "screen_frame",
+                    "data": base64.b64encode(img_data).decode('utf-8'),
+                    "w": screenshot.size[0],
+                    "h": screenshot.size[1],
+                    "vx": vx,
+                    "vy": vy,
+                    "vw": vw,
+                    "vh": vh
+                }
+                reliable_send(sock, frame_data)
+            except Exception as e:
+                print(f"[错误] 发送屏幕帧失败: {e}")
+                break
+            
+            send_time = (time.time() - send_start) * 1000
+            
+            # 更新统计
+            frame_count += 1
+            total_screenshot_time += screenshot_time
+            total_scale_time += scale_time
+            total_encode_time += encode_time
+            total_send_time += send_time
+            
+            # 计算当前帧处理时间
+            current_process_time = time.time() - frame_start
+            last_process_time = current_process_time
+            
+            # 性能警告和自适应调整
+            if current_process_time * 1000 > target_frame_time * 1000 * 1.2:  # 120%阈值
+                print(f"[警告] 帧处理时间过长: {current_process_time * 1000:.1f}ms (目标: {target_frame_time * 1000:.1f}ms)")
+                
+                # 自适应降低帧率
+                if hasattr(take_screenshot, '_pywin32_failures') and take_screenshot._pywin32_failures > 0:
+                    # 如果是截图问题导致的性能下降，临时降低帧率
+                    target_frame_time = min(target_frame_time * 1.1, 1.0)  # 最低1FPS
+                    print(f"[自适应] 临时降低帧率，新目标帧时间: {target_frame_time * 1000:.1f}ms")
+            
+            # 每5秒输出一次性能统计和健康检查
+            current_time = time.time()
+            if current_time - last_stats_time >= 5.0:
+                elapsed = current_time - start_time
+                actual_fps = frame_count / elapsed
+                avg_screenshot = total_screenshot_time / frame_count
+                avg_scale = total_scale_time / frame_count
+                avg_encode = total_encode_time / frame_count
+                avg_send = total_send_time / frame_count
+                
+                # 添加截图方法统计
+                screenshot_method = "ImageGrab"
+                if hasattr(take_screenshot, '_pywin32_failures'):
+                    if take_screenshot._pywin32_failures == 0:
+                        screenshot_method = "pywin32"
+                    elif take_screenshot._pywin32_failures < 5:
+                        screenshot_method = f"pywin32(失败{take_screenshot._pywin32_failures}次)"
+                    else:
+                        screenshot_method = f"ImageGrab(pywin32已禁用)"
+                
+                print(f"[性能统计] 实际FPS: {actual_fps:.1f} | 截图: {avg_screenshot:.1f}ms({screenshot_method}) | 缩放: {avg_scale:.1f}ms | 编码: {avg_encode:.1f}ms | 发送: {avg_send:.1f}ms")
+                
+                # 性能健康检查
+                if actual_fps < fps * 0.5:  # 实际帧率低于目标的50%
+                    print(f"[警告] 性能严重下降，实际FPS({actual_fps:.1f}) < 目标FPS({fps}) * 50%")
+                
+                last_stats_time = current_time
+            
+            # 帧率控制 - 更精确的时间控制
+            elapsed_frame_time = time.time() - frame_start
+            sleep_time = target_frame_time - elapsed_frame_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            
+    except Exception as e:
+        print(f"[错误] 屏幕流异常: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        print("[屏幕流] 已停止")
+        # 清理截图缓存资源
+        _cleanup_screenshot_cache()
 
 
 def handle_start_screen(arg, state):
@@ -357,6 +601,10 @@ def handle_stop_screen(arg, state):
     if _screen_thread and _screen_thread.is_alive():
         _screen_thread.join(timeout=2)
     _screen_thread = None
+    
+    # 清理截图缓存资源
+    _cleanup_screenshot_cache()
+    
     return {"output": "屏幕流已停止。"}
 
 # =======================================

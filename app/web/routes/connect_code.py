@@ -25,6 +25,24 @@ def _ensure_guest_session_id():
     return sid
 
 
+@connect_code_bp.route('/user/status', methods=['GET'])
+@login_required
+def get_user_code_status():
+    """获取用户连接码状态（不返回明文，只返回是否存在）"""
+    code = ConnectCode.query.filter_by(user_id=current_user.id, code_type='user', is_active=True).first()
+    if code:
+        return jsonify({
+            'exists': True,
+            'last_rotated_at': code.last_rotated_at.isoformat() if code.last_rotated_at else None,
+            'message': '连接码已存在，点击重置按钮可查看新的连接码'
+        })
+    else:
+        return jsonify({
+            'exists': False,
+            'message': '尚未生成连接码，点击重置按钮生成新的连接码'
+        })
+
+
 @connect_code_bp.route('/user/rotate', methods=['POST'])
 @login_required
 def rotate_user_code():
@@ -68,6 +86,41 @@ def ensure_guest_code():
     # 注意：开发环境下 secure=False；生产应为 True 并启用 HTTPS
     resp.set_cookie('guest_session_id', sid, httponly=True, samesite='Lax', secure=False, max_age=30*24*3600)
     return resp
+
+
+@connect_code_bp.route('/user/view', methods=['GET'])
+@login_required
+def view_current_user_connect_code():
+    """查看当前用户的连接码（重新生成以确保安全）"""
+    try:
+        user = current_user
+        
+        # 查找现有连接码
+        existing_code = ConnectCode.query.filter_by(user_id=user.id, code_type='user', is_active=True).first()
+        
+        if existing_code:
+            # 重新生成连接码以确保安全
+            new_code = _gen_code()
+            existing_code.code_hash = _hash_code(new_code)
+            existing_code.last_rotated_at = datetime.utcnow()
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'code': new_code,
+                'rotated_at': existing_code.last_rotated_at.isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '用户没有连接码，请先生成'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'查看连接码失败: {str(e)}'
+        }), 500
 
 
 @connect_code_bp.route('/guest/rotate', methods=['POST'])
