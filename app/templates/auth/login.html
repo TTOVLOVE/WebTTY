@@ -20,7 +20,7 @@
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
             padding: 40px;
             width: 100%;
-            max-width: 400px;
+            max-width: 500px;
         }
         .login-header {
             text-align: center;
@@ -77,6 +77,24 @@
             border-radius: 10px;
             border: none;
         }
+        .captcha-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .captcha-input {
+            flex: 1;
+        }
+        .captcha-image {
+            height: 38px;
+            cursor: pointer;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            transition: border-color 0.3s ease;
+        }
+        .captcha-image:hover {
+            border-color: #667eea;
+        }
     </style>
 </head>
 <body>
@@ -115,6 +133,20 @@
                 </div>
             </div>
             
+            <div class="mb-3">
+                <label for="captcha" class="form-label">验证码</label>
+                <div class="captcha-container">
+                    <div class="captcha-input">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class='bx bx-shield'></i></span>
+                            <input type="text" class="form-control" id="captcha" name="captcha" placeholder="请输入验证码" required>
+                        </div>
+                    </div>
+                    <img id="captcha-image" src="" alt="验证码" class="captcha-image" onclick="refreshCaptcha()" title="点击刷新验证码">
+                </div>
+                <small class="text-muted">点击图片可刷新验证码</small>
+            </div>
+            
             <button type="submit" class="btn btn-primary btn-login">
                 <i class='bx bx-log-in'></i> 登录
             </button>
@@ -139,5 +171,23 @@
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 刷新验证码
+        function refreshCaptcha() {
+            fetch('/captcha')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('captcha-image').src = data.image;
+                })
+                .catch(error => {
+                    console.error('获取验证码失败:', error);
+                });
+        }
+        
+        // 页面加载时获取验证码
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshCaptcha();
+        });
+    </script>
 </body>
 </html>

@@ -299,6 +299,46 @@ def receive_thread(conn, client_id, app, addr, stop_event):
                                     socketio.emit('file_text', event_data, room=admin.id)
                                     logging.debug(f"Emitted 'file_text' for client {client_id} to admin {admin.id}.")
 
+                    elif "screenshot" in data:
+                        print(f"[调试] 服务端收到客户端 {client_id} 的截图数据")
+                        logging.info(f"Received screenshot from client {client_id}")
+                        
+                        # 获取客户端的所有者ID
+                        owner_id = None
+                        with app.app_context():
+                            db_client_id = client_manager.client_info.get(client_id, {}).get('db_client_id')
+                            if db_client_id:
+                                from ..models import Client
+                                client = Client.query.get(db_client_id)
+                                if client:
+                                    owner_id = client.owner_id
+                        
+                        event_data = {
+                            'client_id': client_id,
+                            'screenshot': data['screenshot']
+                        }
+                        
+                        # 定向发送给所有者
+                        if owner_id:
+                            socketio.emit('new_screenshot', event_data, room=owner_id)
+                            print(f"[调试] 已发送new_screenshot事件给所有者 {owner_id}")
+                            logging.debug(f"Emitted 'new_screenshot' for client {client_id} to owner {owner_id}.")
+                        else:
+                            # 如果没有所有者（游客码客户端），广播给所有连接的用户
+                            socketio.emit('new_screenshot', event_data)
+                            print(f"[调试] 已广播new_screenshot事件（无所有者）")
+                            logging.debug(f"Broadcasted 'new_screenshot' for client {client_id} (no owner).")
+
+                        # 广播给所有管理员
+                        with app.app_context():
+                            from ..models import User
+                            admin_users = User.query.filter_by(is_admin=True).all()
+                            for admin in admin_users:
+                                if admin.id != owner_id:
+                                    socketio.emit('new_screenshot', event_data, room=admin.id)
+                                    print(f"[调试] 已发送new_screenshot事件给管理员 {admin.id}")
+                                    logging.debug(f"Emitted 'new_screenshot' for client {client_id} to admin {admin.id}.")
+
                     elif data.get('type') == 'screen_frame':
                         # 转发客户端屏幕帧到前端（包含尺寸与虚拟屏参数，便于坐标映射）
                         socketio.emit('screen_frame_update', {

@@ -22,6 +22,18 @@ SEND_LOCK = threading.Lock()
 _screen_thread = None
 _screen_stop_event = threading.Event()
 
+# 混合式视频流控制
+_hybrid_stream_enabled = False
+_base_layer_thread = None
+_enhancement_layer_thread = None
+_base_layer_stop_event = threading.Event()
+_enhancement_layer_stop_event = threading.Event()
+
+# ROI检测相关
+_current_mouse_pos = (0, 0)
+_active_window_rect = None
+_roi_regions = []
+
 # 虚拟屏常量（用于 ctypes 回退）
 SM_XVIRTUALSCREEN = 76
 SM_YVIRTUALSCREEN = 77
@@ -66,11 +78,167 @@ def _cleanup_screenshot_cache():
     
     print(f"[调试] 截图缓存已清理，时间: {current_time}")
 
+def _get_mouse_position():
+    """获取当前鼠标位置"""
+    global _current_mouse_pos
+    try:
+        if WIN_AVAILABLE:
+            x, y = win32gui.GetCursorPos()
+            _current_mouse_pos = (x, y)
+            return x, y
+        else:
+            # 使用ctypes获取鼠标位置
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+            
+            pt = POINT()
+            ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+            _current_mouse_pos = (pt.x, pt.y)
+            return pt.x, pt.y
+    except Exception as e:
+        print(f"[错误] 获取鼠标位置失败: {e}")
+        return _current_mouse_pos
+
+def _get_active_window_rect():
+    """获取活动窗口矩形区域"""
+    global _active_window_rect
+    try:
+        if WIN_AVAILABLE:
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                rect = win32gui.GetWindowRect(hwnd)
+                _active_window_rect = rect
+                return rect
+        else:
+            # 使用ctypes获取前台窗口
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+            if hwnd:
+                rect = ctypes.wintypes.RECT()
+                ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                rect_tuple = (rect.left, rect.top, rect.right, rect.bottom)
+                _active_window_rect = rect_tuple
+                return rect_tuple
+    except Exception as e:
+        print(f"[错误] 获取活动窗口失败: {e}")
+    return _active_window_rect
+
+def _detect_roi_regions(screen_width, screen_height):
+    """检测兴趣区域(ROI)"""
+    global _roi_regions
+    roi_regions = []
+    
+    # 1. 鼠标周围区域 (640x360)
+    mouse_x, mouse_y = _get_mouse_position()
+    roi_width, roi_height = 640, 360
+    
+    # 确保ROI区域在屏幕范围内
+    roi_x = max(0, min(mouse_x - roi_width // 2, screen_width - roi_width))
+    roi_y = max(0, min(mouse_y - roi_height // 2, screen_height - roi_height))
+    
+    mouse_roi = {
+        'type': 'mouse',
+        'rect': (roi_x, roi_y, roi_x + roi_width, roi_y + roi_height),
+        'priority': 1
+    }
+    roi_regions.append(mouse_roi)
+    
+    # 2. 活动窗口区域
+    active_rect = _get_active_window_rect()
+    if active_rect:
+        # 限制活动窗口ROI的最大尺寸
+        max_roi_width, max_roi_height = 800, 600
+        window_width = active_rect[2] - active_rect[0]
+        window_height = active_rect[3] - active_rect[1]
+        
+        # 如果窗口太大，只取中心区域
+        if window_width > max_roi_width or window_height > max_roi_height:
+            center_x = (active_rect[0] + active_rect[2]) // 2
+            center_y = (active_rect[1] + active_rect[3]) // 2
+            
+            roi_width = min(window_width, max_roi_width)
+            roi_height = min(window_height, max_roi_height)
+            
+            roi_x = max(0, min(center_x - roi_width // 2, screen_width - roi_width))
+            roi_y = max(0, min(center_y - roi_height // 2, screen_height - roi_height))
+            
+            window_roi = {
+                'type': 'window',
+                'rect': (roi_x, roi_y, roi_x + roi_width, roi_y + roi_height),
+                'priority': 2
+            }
+        else:
+            window_roi = {
+                'type': 'window',
+                'rect': active_rect,
+                'priority': 2
+            }
+        
+        # 避免与鼠标ROI重叠太多
+        if not _roi_overlap_too_much(mouse_roi['rect'], window_roi['rect']):
+            roi_regions.append(window_roi)
+    
+    _roi_regions = roi_regions
+    return roi_regions
+
+def _roi_overlap_too_much(rect1, rect2, threshold=0.7):
+    """检查两个ROI区域是否重叠过多"""
+    # 计算交集
+    x1 = max(rect1[0], rect2[0])
+    y1 = max(rect1[1], rect2[1])
+    x2 = min(rect1[2], rect2[2])
+    y2 = min(rect1[3], rect2[3])
+    
+    if x2 <= x1 or y2 <= y1:
+        return False  # 没有重叠
+    
+    # 计算重叠面积
+    overlap_area = (x2 - x1) * (y2 - y1)
+    
+    # 计算较小矩形的面积
+    area1 = (rect1[2] - rect1[0]) * (rect1[3] - rect1[1])
+    area2 = (rect2[2] - rect2[0]) * (rect2[3] - rect2[1])
+    smaller_area = min(area1, area2)
+    
+    # 如果重叠面积超过较小矩形的70%，认为重叠过多
+    return overlap_area / smaller_area > threshold
+
 def _periodic_cleanup():
     """定期清理函数，防止资源累积"""
     current_time = time.time()
     if (current_time - _screenshot_cache['last_cleanup_time'] > _screenshot_cache['cleanup_interval']):
         _cleanup_screenshot_cache()
+
+def take_screenshot_region(region_rect=None):
+    """截取指定区域的屏幕截图"""
+    if region_rect is None:
+        return take_screenshot()
+    
+    try:
+        # 获取完整屏幕截图
+        full_screenshot = take_screenshot()
+        if full_screenshot is None:
+            return None
+        
+        # 裁剪指定区域
+        x1, y1, x2, y2 = region_rect
+        
+        # 确保坐标在有效范围内
+        screen_width, screen_height = full_screenshot.size
+        x1 = max(0, min(x1, screen_width))
+        y1 = max(0, min(y1, screen_height))
+        x2 = max(x1, min(x2, screen_width))
+        y2 = max(y1, min(y2, screen_height))
+        
+        if x2 <= x1 or y2 <= y1:
+            return None
+        
+        # 裁剪图像
+        cropped = full_screenshot.crop((x1, y1, x2, y2))
+        return cropped
+        
+    except Exception as e:
+        print(f"[错误] 区域截图失败: {e}")
+        return None
 
 def take_screenshot():
     # 添加失败计数器，避免频繁重试pywin32
@@ -277,6 +445,11 @@ def handle_list_dir(arg, state):
         return {"output": f"列目录失败: {e}"}
 
 
+def is_image_file(filename):
+    """检查文件是否为图片格式"""
+    image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif'}
+    return os.path.splitext(filename.lower())[1] in image_extensions
+
 def handle_read_file(arg, state):
     if not arg:
         return {"output": "错误: read_file 需要路径参数。"}
@@ -284,10 +457,25 @@ def handle_read_file(arg, state):
         return {"output": f"错误: 文件 '{arg}' 不存在或不是文件。"}
     try:
         size = os.path.getsize(arg)
-        if size > 200 * 1024:
+        
+        # 对于图片文件，允许更大的文件大小（最大5MB）
+        if is_image_file(arg):
+            max_size = 5 * 1024 * 1024  # 5MB
+        else:
+            max_size = 200 * 1024  # 200KB
+            
+        if size > max_size:
             return {"output": f"文件过大（{size} bytes），无法直接在线打开。请下载。"}
+            
         with open(arg, 'rb') as f:
             raw = f.read()
+            
+        # 对于图片文件，直接返回Base64编码
+        if is_image_file(arg):
+            text = base64.b64encode(raw).decode('utf-8')
+            return {"file_text": text, "path": arg, "is_base64": True}
+            
+        # 对于非图片文件，尝试文本解码
         try:
             text = raw.decode('utf-8')
         except:
@@ -572,6 +760,236 @@ def _screen_stream_loop(sock, stop_event, fps, quality, max_width):
         _cleanup_screenshot_cache()
 
 
+def _base_layer_stream_loop(sock, stop_event, fps=8, quality=50, max_width=960):
+    """基础层流循环 - 低帧率全屏底图"""
+    try:
+        target_frame_time = 1.0 / fps
+        frame_count = 0
+        start_time = time.time()
+        last_stats_time = start_time
+        
+        print(f"[混合流] 基础层启动: {max_width}px @ {fps}fps, 质量={quality}")
+        
+        while not stop_event.is_set():
+            frame_start = time.time()
+            
+            # 截取全屏
+            try:
+                screenshot = take_screenshot()
+                if screenshot is None:
+                    time.sleep(0.5)
+                    continue
+            except Exception as e:
+                print(f"[基础层] 截图失败: {e}")
+                time.sleep(0.5)
+                continue
+            
+            # 缩放到目标分辨率 (960x540)
+            original_size = screenshot.size
+            if original_size[0] > max_width:
+                target_height = int(original_size[1] * max_width / original_size[0])
+                screenshot = screenshot.resize((max_width, target_height), Image.LANCZOS)
+            
+            # 编码为JPEG
+            buffer = BytesIO()
+            screenshot.save(buffer, format='JPEG', quality=quality, optimize=True)
+            img_data = buffer.getvalue()
+            buffer.close()
+            
+            # 发送基础层数据
+            try:
+                vx, vy, vw, vh = _get_virtual_screen_metrics()
+                frame_data = {
+                    "type": "hybrid_base_frame",
+                    "data": base64.b64encode(img_data).decode('utf-8'),
+                    "w": screenshot.size[0],
+                    "h": screenshot.size[1],
+                    "vx": vx, "vy": vy, "vw": vw, "vh": vh,
+                    "frame_id": frame_count,
+                    "timestamp": time.time()
+                }
+                reliable_send(sock, frame_data)
+                frame_count += 1
+                
+            except Exception as e:
+                print(f"[基础层] 发送失败: {e}")
+                break
+            
+            # 性能统计
+            current_time = time.time()
+            if current_time - last_stats_time >= 10.0:  # 每10秒输出一次统计
+                elapsed = current_time - start_time
+                actual_fps = frame_count / elapsed if elapsed > 0 else 0
+                print(f"[基础层] 统计: {actual_fps:.1f} FPS, 已发送 {frame_count} 帧")
+                last_stats_time = current_time
+            
+            # 帧率控制
+            frame_time = time.time() - frame_start
+            sleep_time = target_frame_time - frame_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+                
+    except Exception as e:
+        print(f"[基础层] 流循环异常: {e}")
+    finally:
+        print("[基础层] 流已停止")
+
+def _enhancement_layer_stream_loop(sock, stop_event, fps=30, quality=70):
+    """增强层流循环 - 高帧率ROI区域"""
+    try:
+        target_frame_time = 1.0 / fps
+        frame_count = 0
+        start_time = time.time()
+        last_stats_time = start_time
+        last_roi_update = 0
+        
+        print(f"[混合流] 增强层启动: ROI @ {fps}fps, 质量={quality}")
+        
+        while not stop_event.is_set():
+            frame_start = time.time()
+            
+            # 每0.5秒更新一次ROI区域
+            current_time = time.time()
+            if current_time - last_roi_update > 0.5:
+                # 获取屏幕尺寸用于ROI检测
+                try:
+                    vx, vy, vw, vh = _get_virtual_screen_metrics()
+                    roi_regions = _detect_roi_regions(vw, vh)
+                    last_roi_update = current_time
+                except Exception as e:
+                    print(f"[增强层] ROI检测失败: {e}")
+                    roi_regions = []
+            else:
+                roi_regions = _roi_regions
+            
+            if not roi_regions:
+                time.sleep(0.1)
+                continue
+            
+            # 处理每个ROI区域
+            for roi in roi_regions:
+                if stop_event.is_set():
+                    break
+                    
+                try:
+                    # 截取ROI区域
+                    roi_screenshot = take_screenshot_region(roi['rect'])
+                    if roi_screenshot is None:
+                        continue
+                    
+                    # 编码ROI图像
+                    buffer = BytesIO()
+                    roi_screenshot.save(buffer, format='JPEG', quality=quality, optimize=True)
+                    img_data = buffer.getvalue()
+                    buffer.close()
+                    
+                    # 发送增强层数据
+                    frame_data = {
+                        "type": "hybrid_enhancement_frame",
+                        "data": base64.b64encode(img_data).decode('utf-8'),
+                        "w": roi_screenshot.size[0],
+                        "h": roi_screenshot.size[1],
+                        "roi_rect": roi['rect'],
+                        "roi_type": roi['type'],
+                        "roi_priority": roi['priority'],
+                        "frame_id": frame_count,
+                        "timestamp": time.time()
+                    }
+                    reliable_send(sock, frame_data)
+                    frame_count += 1
+                    
+                except Exception as e:
+                    print(f"[增强层] ROI处理失败: {e}")
+                    continue
+            
+            # 性能统计
+            if current_time - last_stats_time >= 10.0:  # 每10秒输出一次统计
+                elapsed = current_time - start_time
+                actual_fps = frame_count / elapsed if elapsed > 0 else 0
+                roi_count = len(_roi_regions)
+                print(f"[增强层] 统计: {actual_fps:.1f} FPS, {roi_count} ROI区域, 已发送 {frame_count} 帧")
+                last_stats_time = current_time
+            
+            # 帧率控制
+            frame_time = time.time() - frame_start
+            sleep_time = target_frame_time - frame_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+                
+    except Exception as e:
+        print(f"[增强层] 流循环异常: {e}")
+    finally:
+        print("[增强层] 流已停止")
+
+def handle_start_hybrid_screen(arg, state):
+    """启动混合式视频流"""
+    global _hybrid_stream_enabled, _base_layer_thread, _enhancement_layer_thread
+    
+    if platform.system().lower() != 'windows':
+        return {"output": "当前客户端非Windows，无法开启混合屏幕流。"}
+    if 'socket' not in state or not state['socket']:
+        return {"output": "尚未建立到服务器的套接字，无法开启混合屏幕流。"}
+    if _hybrid_stream_enabled:
+        return {"output": "混合屏幕流已在运行。"}
+    
+    # 解析参数
+    params = _parse_kv_arg(arg)
+    base_fps = int(params.get('base_fps', 8))
+    enhancement_fps = int(params.get('enhancement_fps', 30))
+    base_quality = int(params.get('base_quality', 50))
+    enhancement_quality = int(params.get('enhancement_quality', 70))
+    base_width = int(params.get('base_width', 960))
+    
+    try:
+        # 启动基础层
+        _base_layer_stop_event.clear()
+        _base_layer_thread = threading.Thread(
+            target=_base_layer_stream_loop,
+            args=(state['socket'], _base_layer_stop_event, base_fps, base_quality, base_width),
+            daemon=True
+        )
+        _base_layer_thread.start()
+        
+        # 启动增强层
+        _enhancement_layer_stop_event.clear()
+        _enhancement_layer_thread = threading.Thread(
+            target=_enhancement_layer_stream_loop,
+            args=(state['socket'], _enhancement_layer_stop_event, enhancement_fps, enhancement_quality),
+            daemon=True
+        )
+        _enhancement_layer_thread.start()
+        
+        _hybrid_stream_enabled = True
+        
+        return {"output": f"混合屏幕流已启动 - 基础层: {base_width}px@{base_fps}fps, 增强层: ROI@{enhancement_fps}fps"}
+        
+    except Exception as e:
+        return {"output": f"启动混合屏幕流失败: {e}"}
+
+def handle_stop_hybrid_screen(arg, state):
+    """停止混合式视频流"""
+    global _hybrid_stream_enabled, _base_layer_thread, _enhancement_layer_thread
+    
+    _hybrid_stream_enabled = False
+    
+    # 停止基础层
+    _base_layer_stop_event.set()
+    if _base_layer_thread and _base_layer_thread.is_alive():
+        _base_layer_thread.join(timeout=2)
+    _base_layer_thread = None
+    
+    # 停止增强层
+    _enhancement_layer_stop_event.set()
+    if _enhancement_layer_thread and _enhancement_layer_thread.is_alive():
+        _enhancement_layer_thread.join(timeout=2)
+    _enhancement_layer_thread = None
+    
+    # 清理资源
+    _cleanup_screenshot_cache()
+    
+    return {"output": "混合屏幕流已停止。"}
+
+
 def handle_start_screen(arg, state):
     global _screen_thread
     # 允许 Windows 平台，即使缺少 pywin32 也可通过 Pillow ImageGrab 回退
@@ -779,6 +1197,9 @@ COMMAND_HANDLERS = {
     # 屏幕流控制
     "start_screen": lambda arg, state: handle_start_screen(arg, state),
     "stop_screen": lambda arg, state: handle_stop_screen(arg, state),
+    # 混合式视频流控制
+    "start_hybrid_screen": lambda arg, state: handle_start_hybrid_screen(arg, state),
+    "stop_hybrid_screen": lambda arg, state: handle_stop_hybrid_screen(arg, state),
     # 输入控制
     "mouse": lambda arg, state: handle_mouse(arg, state),
     "key": lambda arg, state: handle_key(arg, state)
@@ -987,17 +1408,17 @@ class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
         main_frame = tk.Frame(self, padx=25, pady=25)
         main_frame.pack(fill="both", expand=True)
 
-        tk.Label(main_frame, text="Server IP:", font=self.font_large).grid(row=0, column=0, sticky="w", pady=10)
+        tk.Label(main_frame, text="服务端IP:", font=self.font_large).grid(row=0, column=0, sticky="w", pady=10)
         self.ip_entry = tk.Entry(main_frame, font=self.font_large)
         self.ip_entry.insert(0, "192.168.242.102")
         self.ip_entry.grid(row=0, column=1, pady=10, sticky="ew")
 
-        tk.Label(main_frame, text="Server Port:", font=self.font_large).grid(row=1, column=0, sticky="w", pady=10)
+        tk.Label(main_frame, text="服务端端口:", font=self.font_large).grid(row=1, column=0, sticky="w", pady=10)
         self.port_entry = tk.Entry(main_frame, font=self.font_large)
         self.port_entry.insert(0, "2383")
         self.port_entry.grid(row=1, column=1, pady=10, sticky="ew")
 
-        tk.Label(main_frame, text="Connection Code:", font=self.font_large).grid(row=2, column=0, sticky="w", pady=10)
+        tk.Label(main_frame, text="连接码:", font=self.font_large).grid(row=2, column=0, sticky="w", pady=10)
         self.connection_code_entry = tk.Entry(main_frame, font=self.font_large, show="*")
         self.connection_code_entry.grid(row=2, column=1, pady=10, sticky="ew")
 

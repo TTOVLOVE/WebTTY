@@ -7,8 +7,18 @@ import random
 import string
 from ...models import User, Role, InvitationCode, SystemLog, UserLoginLog, UserSecurityInfo
 from ...extensions import db
+from ...utils.captcha import CaptchaGenerator
 
 auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.route('/captcha')
+def get_captcha():
+    """获取验证码图片"""
+    generator = CaptchaGenerator()
+    captcha_data = generator.generate_captcha()
+    return jsonify({
+        'image': captcha_data['image']
+    })
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -19,6 +29,12 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        captcha_input = request.form.get('captcha')
+        
+        # 验证验证码
+        if not CaptchaGenerator.verify_captcha(captcha_input):
+            flash('验证码错误！', 'error')
+            return render_template('auth/login.html')
         
         user = User.authenticate(username, password)
         if user:

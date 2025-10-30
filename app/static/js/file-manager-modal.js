@@ -340,11 +340,133 @@ class ModalFileManager {
     handleFileContent(data) {
         const pre = document.getElementById('fm-file-text');
         if (data.is_base64) {
-            this.setPreTextContent(pre, "(文件为二进制，base64 显示)\n" + data.text);
+            // 检查是否为图片文件
+            if (this.isImageFile(data.path)) {
+                this.displayImagePreview(pre, data.text, data.path);
+            } else {
+                this.setPreTextContent(pre, "(文件为二进制，base64 显示)\n" + data.text);
+            }
         } else {
             this.setPreTextContent(pre, data.text);
         }
         this.setStatus(`已获取文件: ${data.path}`, 'success');
+    }
+
+    isImageFile(filePath) {
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif'];
+        const extension = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+        return imageExtensions.includes(extension);
+    }
+
+    displayImagePreview(container, base64Data, filePath) {
+        // 清空容器
+        container.innerHTML = '';
+        
+        // 创建图片预览容器
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'image-preview-container';
+        previewContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+            background: var(--light-bg);
+            border-radius: var(--radius-md);
+            height: 100%;
+            overflow: auto;
+        `;
+
+        // 创建文件信息
+        const fileInfo = document.createElement('div');
+        fileInfo.className = 'file-info';
+        fileInfo.style.cssText = `
+            margin-bottom: 1rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        `;
+        fileInfo.innerHTML = `
+            <i class='bx bx-image'></i>
+            <strong>图片预览</strong><br>
+            <span>${filePath}</span>
+        `;
+
+        // 创建图片元素
+        const img = document.createElement('img');
+        img.style.cssText = `
+            max-width: 100%;
+            max-height: calc(100% - 80px);
+            object-fit: contain;
+            border-radius: var(--radius-sm);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            background: white;
+        `;
+
+        // 获取文件扩展名来确定MIME类型
+        const extension = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+        let mimeType = 'image/jpeg'; // 默认
+        
+        switch(extension) {
+            case '.png':
+                mimeType = 'image/png';
+                break;
+            case '.gif':
+                mimeType = 'image/gif';
+                break;
+            case '.bmp':
+                mimeType = 'image/bmp';
+                break;
+            case '.webp':
+                mimeType = 'image/webp';
+                break;
+            case '.svg':
+                mimeType = 'image/svg+xml';
+                break;
+            case '.ico':
+                mimeType = 'image/x-icon';
+                break;
+            case '.tiff':
+            case '.tif':
+                mimeType = 'image/tiff';
+                break;
+            default:
+                mimeType = 'image/jpeg';
+        }
+
+        // 设置图片源
+        img.src = `data:${mimeType};base64,${base64Data}`;
+        
+        // 添加加载错误处理
+        img.onerror = () => {
+            previewContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    <i class='bx bx-error' style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                    <p>图片加载失败</p>
+                    <p style="font-size: 0.875rem;">可能是不支持的图片格式</p>
+                </div>
+            `;
+        };
+
+        // 添加加载成功处理
+        img.onload = () => {
+            // 添加图片信息
+            const imgInfo = document.createElement('div');
+            imgInfo.style.cssText = `
+                margin-top: 1rem;
+                text-align: center;
+                color: var(--text-muted);
+                font-size: 0.75rem;
+            `;
+            imgInfo.textContent = `尺寸: ${img.naturalWidth} × ${img.naturalHeight}`;
+            previewContainer.appendChild(imgInfo);
+        };
+
+        // 组装预览容器
+        previewContainer.appendChild(fileInfo);
+        previewContainer.appendChild(img);
+        
+        // 添加到主容器
+        container.appendChild(previewContainer);
     }
 
     handleCommandResult(data) {
