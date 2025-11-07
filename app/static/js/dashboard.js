@@ -3,6 +3,7 @@ class Dashboard {
     constructor() {
         this.socket = null;
         this.currentCommandForParam = "";
+        this.lastCommandsByClient = {}; // 记录最近一次发送给各客户端的命令文本
         this.messageHistory = [];
         this.maxHistory = 1000;
         this.lastTimeoutMessage = 0;
@@ -61,6 +62,16 @@ class Dashboard {
 
         this.socket.on('command_result', (data) => {
             this.handleCommandResult(data);
+        });
+
+        // 安全策略阻止或错误反馈
+        this.socket.on('command_response', (data) => {
+            this.handleCommandResponse(data);
+        });
+
+        // 安全策略警告反馈（允许执行，但需提示）
+        this.socket.on('command_warning', (data) => {
+            this.handleCommandWarning(data);
         });
 
         this.socket.on('clients_list', (data) => {
@@ -271,6 +282,8 @@ class Dashboard {
         this.addFeedbackMessage(`正在发送命令: ${cmdFull}`);
 
         console.log(`发送命令给 ${target}: action='${action}', arg='${arg}'`);
+        // 记录最近一次尝试发送给该客户端的命令文本（用于阻止/警告时提示）
+        this.lastCommandsByClient[target] = cmdFull;
         this.socket.emit("send_command", { target, command: { action, arg } });
         document.getElementById("command-input").value = "";
         document.getElementById("command-input").focus();
@@ -291,6 +304,8 @@ class Dashboard {
         this.addFeedbackMessage(`正在发送快捷命令: ${cmdDisplay}`);
 
         console.log(`发送快捷命令给 ${target}: action='${cmdAction}', arg='${cmdArg}'`);
+        // 记录最近一次尝试发送给该客户端的命令文本（用于阻止/警告时提示）
+        this.lastCommandsByClient[target] = cmdDisplay;
         this.socket.emit("send_command", { target, command: { action: cmdAction, arg: cmdArg } });
     }
 
@@ -430,6 +445,114 @@ class Dashboard {
         requestAnimationFrame(() => {
             out.scrollTop = out.scrollHeight;
         });
+    }
+
+    handleCommandResponse(data) {
+        // 统一处理后端返回的响应，包括安全阻止与一般错误
+        const out = document.getElementById('output');
+        if (!out) return;
+
+        const timestamp = new Date().toLocaleTimeString();
+        const clientId = data.client_id || '未知客户端';
+
+        if (data && data.error) {
+            // 安全组阻止
+            if (data.security_blocked) {
+                const attempted = this.lastCommandsByClient[clientId] || '';
+                const msg = data.error || '命令被安全策略阻止';
+                this.addSecurityMessage(clientId, msg, 'block', attempted, data.rule_matched);
+                return;
+            }
+
+            // 非安全阻止的一般错误
+            const line = document.createElement('div');
+            line.className = 'terminal-line terminal-error';
+            const t = document.createElement('span');
+            t.className = 'terminal-timestamp';
+            t.textContent = `[${timestamp}] `;
+            line.appendChild(t);
+            const sys = document.createElement('span');
+            sys.className = 'terminal-system';
+            sys.textContent = '[系统] ';
+            line.appendChild(sys);
+            const cli = document.createElement('span');
+            cli.className = 'terminal-client';
+            cli.textContent = `[${clientId}] `;
+            line.appendChild(cli);
+            const content = document.createElement('span');
+            content.textContent = data.error;
+            line.appendChild(content);
+
+            out.appendChild(line);
+            requestAnimationFrame(() => { out.scrollTop = out.scrollHeight; });
+
+            this.saveToHistory({ htmlContent: line.outerHTML, is_error: true, timestamp });
+            return;
+        }
+
+        // 可选：命令已发送确认（目前不重复提示）
+    }
+
+    handleCommandWarning(data) {
+        const out = document.getElementById('output');
+        if (!out) return;
+
+        const clientId = data.client_id || '未知客户端';
+        const attempted = this.lastCommandsByClient[clientId] || '';
+        const msg = data && data.message ? data.message : '命令触发安全警告';
+        this.addSecurityMessage(clientId, msg, 'warn', attempted, data.rule_matched);
+    }
+
+    addSecurityMessage(clientId, message, level = 'warn', commandText = '', ruleMatched = '') {
+        const out = document.getElementById('output');
+        if (!out) return;
+
+        const timestamp = new Date().toLocaleTimeString();
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        if (level === 'block') {
+            line.classList.add('terminal-error');
+        } else {
+            line.classList.add('terminal-warning');
+        }
+
+        const t = document.createElement('span');
+        t.className = 'terminal-timestamp';
+        t.textContent = `[${timestamp}] `;
+        line.appendChild(t);
+
+        const tag = document.createElement('span');
+        tag.className = 'terminal-system';
+        tag.textContent = '[安全组] ';
+        line.appendChild(tag);
+
+        const cli = document.createElement('span');
+        cli.className = 'terminal-client';
+        cli.textContent = `[${clientId}] `;
+        line.appendChild(cli);
+
+        const textSpan = document.createElement('span');
+        const prefix = level === 'block' ? '该客户端被禁止执行' : '该客户端触发安全警告';
+        if (commandText) {
+            textSpan.textContent = `${prefix}: ${commandText} (${message})`;
+        } else {
+            textSpan.textContent = `${prefix}: ${message}`;
+        }
+        line.appendChild(textSpan);
+
+        if (ruleMatched) {
+            const detail = document.createElement('small');
+            detail.className = 'text-muted';
+            detail.textContent = ` 规则匹配: ${ruleMatched}`;
+            line.appendChild(detail);
+        }
+
+        out.appendChild(line);
+        requestAnimationFrame(() => { out.scrollTop = out.scrollHeight; });
+
+        const historyItem = { htmlContent: line.outerHTML, timestamp };
+        if (level === 'block') historyItem.is_error = true; else historyItem.is_warning = true;
+        this.saveToHistory(historyItem);
     }
 
     addFeedbackMessage(message) {

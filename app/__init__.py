@@ -31,6 +31,7 @@ from .web.routes.user_management import user_management_bp
 from .web.routes.vulnerability_scan import vulnerability_scan_bp
 from .web.routes.profile import profile_bp
 from .web.routes.recovery_api import recovery_api_bp
+from .web.routes.security_groups import security_groups_bp
 
 # 创建登录管理器
 login_manager = LoginManager()
@@ -107,6 +108,19 @@ def ensure_connect_code_table(app):
             print(f"[DB] ConnectCode 表检查/创建失败: {e}")
 
 
+
+
+def ensure_vulnerability_scan_table(app):
+    """确保漏洞扫描记录表存在"""
+    with app.app_context():
+        try:
+            from .models import VulnerabilityScanRecord
+            engine = db.get_engine()
+            if 'sqlite' in str(engine.url):
+                VulnerabilityScanRecord.__table__.create(bind=engine, checkfirst=True)
+        except Exception as e:
+            print(f"[DB] VulnerabilityScanRecord 表检查/创建失败: {e}")
+
 def create_app(config_name=None):
     app = Flask(__name__)
     config_class = get_config(config_name or os.getenv("FLASK_ENV", "dev"))
@@ -122,6 +136,8 @@ def create_app(config_name=None):
     ensure_client_columns(app)
     # 确保 connect_codes 表存在
     ensure_connect_code_table(app)
+    # 确保漏洞扫描记录表存在
+    ensure_vulnerability_scan_table(app)
     
     # 初始化Flask-Login
     login_manager.init_app(app)
@@ -152,6 +168,7 @@ def create_app(config_name=None):
     app.register_blueprint(profile_bp)
     app.register_blueprint(recovery_api_bp)
     app.register_blueprint(connect_code_bp)
+    app.register_blueprint(security_groups_bp)
 
     
     # 注册带前缀的蓝图

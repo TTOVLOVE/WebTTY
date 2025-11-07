@@ -6,6 +6,7 @@ import base64
 from ..utils.helpers import human_readable_size
 from ..services import client_manager
 from ..services.transfer_service import save_screenshot
+from ..services.command_security import command_security_service
 import logging
 
 # 一个临时存放上传数据的缓存
@@ -101,8 +102,10 @@ def init_socketio(socketio):
         """发送命令到客户端"""
         target = data.get('target')  # 前端发送的是 'target'
         command = data.get('command', {})  # 前端发送的命令在 'command' 对象中
-        action = command.get('action')
-        arg = command.get('arg')
+        action = (command.get('action') or '').strip()
+        arg = (command.get('arg') or '').strip()
+        # 统一解析待检查的实际命令字符串
+        effective_cmd = arg if action in ['execute_command', 'shell_command'] else f"{action} {arg}".strip()
         
         # 权限检查：验证用户是否有权限操作该客户端
         if current_user.is_authenticated:
@@ -120,6 +123,41 @@ def init_socketio(socketio):
                                 'error': '权限不足：您无权操作此客户端'
                             })
                             return
+                        
+                        # 安全检查：针对实际命令字符串进行策略匹配
+                        if effective_cmd:
+                            try:
+                                security_check = command_security_service.check_command_permission(
+                                    client_id=db_client_id,
+                                    command=effective_cmd,
+                                    command_type=action if action in ['execute_command', 'shell_command'] else 'execute_command',
+                                    user_id=current_user.id,
+                                    session_id=request.sid,
+                                    ip_address=request.remote_addr,
+                                    user_agent=request.headers.get('User-Agent')
+                                )
+
+                                if not security_check['allowed']:
+                                    emit('command_response', {
+                                        'client_id': target,
+                                        'error': security_check['message'],
+                                        'security_blocked': True,
+                                        'rule_matched': security_check.get('rule_matched'),
+                                        'security_group_id': security_check.get('security_group_id')
+                                    })
+                                    return
+                                elif security_check['action'] == 'warn':
+                                    # 发送警告但允许执行
+                                    emit('command_warning', {
+                                        'client_id': target,
+                                        'message': security_check['message'],
+                                        'rule_matched': security_check.get('rule_matched')
+                                    })
+
+                            except Exception as e:
+                                logging.error(f"Security check failed for command '{effective_cmd}': {e}")
+                                # 安全检查失败时记录错误但不阻止命令执行，避免影响正常功能
+                                
             except Exception as e:
                 logging.error(f"Error checking client permissions: {e}")
                 emit('command_response', {
@@ -177,11 +215,72 @@ def init_socketio(socketio):
         arg = ' '.join(parts[1:]) if len(parts) > 1 else ''
         
         cmd_obj = {'action': action, 'arg': arg}
-        
-        # 向每个客户端发送命令
+
+        # 向每个客户端发送命令（包含权限与安全检查）
         for client_id in clients:
             if client_id in client_manager.client_queues:
-                client_manager.client_queues[client_id].put(cmd_obj)
+                try:
+                    # 解析数据库客户端ID
+                    client_info = client_manager.client_info.get(client_id)
+                    db_client_id = client_info.get('db_client_id') if isinstance(client_info, dict) else None
+
+                    # 权限检查
+                    if current_user.is_authenticated and db_client_id:
+                        try:
+                            from ..models import Client
+                            client = Client.query.get(db_client_id)
+                            if client and not current_user.can_operate_client(client):
+                                emit('batch_command_result', {
+                                    'client_id': client_id,
+                                    'output': '权限不足：您无权操作此客户端',
+                                    'is_error': True
+                                })
+                                continue
+                        except Exception:
+                            pass
+
+                    # 安全检查（使用原始命令字符串）
+                    effective_cmd = command.strip()
+                    if db_client_id and effective_cmd:
+                        try:
+                            security_check = command_security_service.check_command_permission(
+                                client_id=db_client_id,
+                                command=effective_cmd,
+                                command_type='execute_command',
+                                user_id=current_user.id if current_user.is_authenticated else None,
+                                session_id=request.sid,
+                                ip_address=request.remote_addr,
+                                user_agent=request.headers.get('User-Agent')
+                            )
+
+                            if not security_check['allowed']:
+                                emit('batch_command_result', {
+                                    'client_id': client_id,
+                                    'output': security_check['message'],
+                                    'is_error': True,
+                                    'security_blocked': True,
+                                    'rule_matched': security_check.get('rule_matched'),
+                                    'security_group_id': security_check.get('security_group_id')
+                                })
+                                continue
+                            elif security_check['action'] == 'warn':
+                                emit('batch_command_result', {
+                                    'client_id': client_id,
+                                    'output': security_check['message'],
+                                    'is_error': False
+                                })
+                        except Exception:
+                            # 安全检查异常不阻塞命令发送
+                            pass
+
+                    # 发送到客户端队列
+                    client_manager.client_queues[client_id].put(cmd_obj)
+                except Exception as e:
+                    emit('batch_command_result', {
+                        'client_id': client_id,
+                        'output': str(e),
+                        'is_error': True
+                    })
             else:
                 emit('batch_command_result', {
                     'client_id': client_id,

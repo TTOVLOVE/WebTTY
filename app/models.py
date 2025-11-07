@@ -280,6 +280,66 @@ class ClientLog(db.Model):
     
     user = db.relationship('User', backref='client_logs')
 
+class VulnerabilityScanRecord(db.Model):
+    """漏洞扫描记录"""
+    __tablename__ = 'vulnerability_scan_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    client_id = db.Column(db.String(64), nullable=True)
+    db_client_id = db.Column(db.Integer, nullable=True)
+    target_name = db.Column(db.String(255), nullable=False)
+    target_ip = db.Column(db.String(64), nullable=True)
+    scan_type = db.Column(db.String(32), nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    progress = db.Column(db.Integer, default=0)
+    options = db.Column(db.JSON, nullable=True)
+    command = db.Column(db.JSON, nullable=True)
+    results = db.Column(db.JSON, nullable=True)
+    vulnerabilities = db.Column(db.JSON, nullable=True)
+    raw_output = db.Column(db.JSON, nullable=True)
+    log_path = db.Column(db.String(255), nullable=True)
+    report_path = db.Column(db.String(255), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    start_time = db.Column(db.DateTime, default=datetime.utcnow)
+    end_time = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref='vulnerability_scans')
+
+    def to_dict(self, include_raw=False):
+        data = {
+            'id': self.id,
+            'task_id': self.task_id,
+            'user_id': self.user_id,
+            'client_id': self.client_id,
+            'db_client_id': self.db_client_id,
+            'target': self.target_name,
+            'target_name': self.target_name,
+            'target_client_id': self.client_id,
+            'target_ip': self.target_ip,
+            'scan_type': self.scan_type,
+            'status': self.status,
+            'progress': self.progress,
+            'options': self.options or {},
+            'command': self.command or [],
+            'results': self.results or [],
+            'vulnerabilities': self.vulnerabilities or self.results or [],
+            'log_path': self.log_path,
+            'report_path': self.report_path,
+            'message': self.message or '',
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_raw:
+            data['raw_output'] = self.raw_output or []
+        return data
+
+
 class Connection(db.Model):
     """连接配置表"""
     __tablename__ = 'connections'
@@ -376,3 +436,288 @@ class UserSecurityInfo(db.Model):
     
     def __repr__(self):
         return f'<UserSecurityInfo for user {self.user_id}>'
+
+
+class SecurityGroup(db.Model):
+    """安全组表"""
+    __tablename__ = 'security_groups'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    group_type = db.Column(db.String(20), default='custom', nullable=False)  # default, restricted, high_security, custom
+    parent_group_id = db.Column(db.Integer, db.ForeignKey('security_groups.id'), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # 关系
+    parent_group = db.relationship('SecurityGroup', remote_side=[id], backref='child_groups')
+    creator = db.relationship('User', backref='created_security_groups')
+    rules = db.relationship('CommandBlacklistRule', backref='security_group', lazy='dynamic', cascade='all, delete-orphan')
+    client_assignments = db.relationship('ClientSecurityGroup', backref='security_group', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'group_type': self.group_type,
+            'parent_group_id': self.parent_group_id,
+            'parent_group_name': self.parent_group.name if self.parent_group else None,
+            'is_active': self.is_active,
+            'created_by': self.created_by,
+            'creator_name': self.creator.username if self.creator else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'rule_count': self.rules.count(),
+            'client_count': self.client_assignments.filter_by(is_active=True).count()
+        }
+    
+    @staticmethod
+    def get_by_id(group_id):
+        """根据ID获取安全组"""
+        return SecurityGroup.query.get(group_id)
+    
+    @staticmethod
+    def get_active_groups():
+        """获取所有活跃的安全组"""
+        return SecurityGroup.query.filter_by(is_active=True).all()
+    
+    def get_active_rules(self, os_type=None):
+        """获取该安全组的活跃规则"""
+        query = self.rules.filter_by(is_active=True)
+        if os_type:
+            query = query.filter(db.or_(
+                CommandBlacklistRule.os_type == os_type,
+                CommandBlacklistRule.os_type == 'all'
+            ))
+        return query.order_by(CommandBlacklistRule.priority.asc()).all()
+
+
+class CommandBlacklistRule(db.Model):
+    """命令黑名单规则表"""
+    __tablename__ = 'command_blacklist_rules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    security_group_id = db.Column(db.Integer, db.ForeignKey('security_groups.id'), nullable=False)
+    rule_type = db.Column(db.String(20), nullable=False)  # command, pattern, category
+    rule_value = db.Column(db.String(255), nullable=False)
+    os_type = db.Column(db.String(20), nullable=True)  # windows, linux, all
+    action = db.Column(db.String(20), default='block', nullable=False)  # block, warn, allow
+    priority = db.Column(db.Integer, default=100, nullable=False)  # 数值越小优先级越高
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # 索引
+    __table_args__ = (
+        db.Index('idx_security_group_priority', 'security_group_id', 'priority'),
+        db.Index('idx_rule_type_os', 'rule_type', 'os_type'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'security_group_id': self.security_group_id,
+            'security_group_name': self.security_group.name if self.security_group else None,
+            'rule_type': self.rule_type,
+            'rule_value': self.rule_value,
+            'os_type': self.os_type,
+            'action': self.action,
+            'priority': self.priority,
+            'is_active': self.is_active,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    @staticmethod
+    def get_by_security_group(security_group_id, os_type=None):
+        """根据安全组ID获取规则"""
+        query = CommandBlacklistRule.query.filter_by(
+            security_group_id=security_group_id,
+            is_active=True
+        )
+        if os_type:
+            query = query.filter(db.or_(
+                CommandBlacklistRule.os_type == os_type,
+                CommandBlacklistRule.os_type == 'all'
+            ))
+        return query.order_by(CommandBlacklistRule.priority.asc()).all()
+    
+    def matches_command(self, command):
+        """检查规则是否匹配命令"""
+        import re
+        
+        if self.rule_type == 'command':
+            return command.strip().lower().startswith(self.rule_value.lower())
+        elif self.rule_type == 'pattern':
+            try:
+                return bool(re.search(self.rule_value, command, re.IGNORECASE))
+            except re.error:
+                return False
+        elif self.rule_type == 'category':
+            # 可以根据需要实现分类匹配逻辑
+            dangerous_commands = {
+                'system': ['rm', 'del', 'format', 'fdisk', 'mkfs'],
+                'network': ['wget', 'curl', 'nc', 'netcat'],
+                'process': ['kill', 'killall', 'taskkill']
+            }
+            if self.rule_value in dangerous_commands:
+                return any(command.strip().lower().startswith(cmd) for cmd in dangerous_commands[self.rule_value])
+        
+        return False
+
+
+class ClientSecurityGroup(db.Model):
+    """客户端安全组关联表"""
+    __tablename__ = 'client_security_groups'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    security_group_id = db.Column(db.Integer, db.ForeignKey('security_groups.id'), nullable=False)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # 关系
+    client = db.relationship('Client', backref='security_group_assignments')
+    assigner = db.relationship('User', backref='assigned_security_groups')
+    
+    # 唯一约束：一个客户端只能分配一个活跃的安全组
+    __table_args__ = (
+        db.UniqueConstraint('client_id', 'is_active', name='uq_client_active_security_group'),
+        db.Index('idx_client_security_group', 'client_id', 'security_group_id'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'client_hostname': self.client.hostname if self.client else None,
+            'security_group_id': self.security_group_id,
+            'security_group_name': self.security_group.name if self.security_group else None,
+            'assigned_by': self.assigned_by,
+            'assigner_name': self.assigner.username if self.assigner else None,
+            'assigned_at': self.assigned_at.isoformat() if self.assigned_at else None,
+            'is_active': self.is_active
+        }
+    
+    @staticmethod
+    def get_active_assignment(client_id):
+        """获取客户端的活跃安全组分配"""
+        return ClientSecurityGroup.query.filter_by(
+            client_id=client_id,
+            is_active=True
+        ).first()
+    
+    @staticmethod
+    def assign_security_group(client_id, security_group_id, assigned_by):
+        """为客户端分配安全组"""
+        # 先取消现有的活跃分配
+        existing = ClientSecurityGroup.get_active_assignment(client_id)
+        if existing:
+            existing.is_active = False
+        
+        # 创建新的分配
+        assignment = ClientSecurityGroup(
+            client_id=client_id,
+            security_group_id=security_group_id,
+            assigned_by=assigned_by
+        )
+        db.session.add(assignment)
+        return assignment
+
+
+class CommandExecutionLog(db.Model):
+    """命令执行日志表"""
+    __tablename__ = 'command_execution_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    session_id = db.Column(db.String(64), nullable=True)
+    command = db.Column(db.Text, nullable=False)
+    command_type = db.Column(db.String(50), nullable=True)  # execute_command, shell_command
+    action = db.Column(db.String(20), nullable=False)  # allowed, blocked, warned
+    security_group_id = db.Column(db.Integer, db.ForeignKey('security_groups.id'), nullable=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey('command_blacklist_rules.id'), nullable=True)
+    rule_matched = db.Column(db.String(255), nullable=True)  # 匹配的规则内容
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+    execution_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    response_message = db.Column(db.Text, nullable=True)
+    
+    # 关系
+    client = db.relationship('Client', backref='command_execution_logs')
+    user = db.relationship('User', backref='command_execution_logs')
+    security_group = db.relationship('SecurityGroup', backref='command_execution_logs')
+    rule = db.relationship('CommandBlacklistRule', backref='command_execution_logs')
+    
+    # 索引
+    __table_args__ = (
+        db.Index('idx_client_execution_time', 'client_id', 'execution_time'),
+        db.Index('idx_user_execution_time', 'user_id', 'execution_time'),
+        db.Index('idx_action_execution_time', 'action', 'execution_time'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'client_hostname': self.client.hostname if self.client else None,
+            'user_id': self.user_id,
+            'username': self.user.username if self.user else None,
+            'session_id': self.session_id,
+            'command': self.command,
+            'command_type': self.command_type,
+            'action': self.action,
+            'security_group_id': self.security_group_id,
+            'security_group_name': self.security_group.name if self.security_group else None,
+            'rule_id': self.rule_id,
+            'rule_matched': self.rule_matched,
+            'ip_address': self.ip_address,
+            'user_agent': self.user_agent,
+            'execution_time': self.execution_time.isoformat() if self.execution_time else None,
+            'response_message': self.response_message
+        }
+    
+    @staticmethod
+    def log_command_execution(client_id, command, action, user_id=None, session_id=None,
+                            security_group_id=None, rule_id=None, rule_matched=None,
+                            ip_address=None, user_agent=None, response_message=None,
+                            command_type=None):
+        """记录命令执行日志"""
+        log = CommandExecutionLog(
+            client_id=client_id,
+            user_id=user_id,
+            session_id=session_id,
+            command=command,
+            command_type=command_type,
+            action=action,
+            security_group_id=security_group_id,
+            rule_id=rule_id,
+            rule_matched=rule_matched,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            response_message=response_message
+        )
+        db.session.add(log)
+        return log
+    
+    @staticmethod
+    def get_recent_logs(client_id=None, user_id=None, action=None, limit=100):
+        """获取最近的命令执行日志"""
+        query = CommandExecutionLog.query
+        
+        if client_id:
+            query = query.filter_by(client_id=client_id)
+        if user_id:
+            query = query.filter_by(user_id=user_id)
+        if action:
+            query = query.filter_by(action=action)
+        
+        return query.order_by(CommandExecutionLog.execution_time.desc()).limit(limit).all()

@@ -30,6 +30,12 @@ class BaseConfig:
     GUAC_USERNAME = os.getenv("GUAC_USERNAME", "guacadmin")
     GUAC_PASSWORD = os.getenv("GUAC_PASSWORD", "guacadmin")
 
+    # Vulnerability scanning
+    FSCAN_WINDOWS_PATH = os.getenv("FSCAN_WINDOWS_PATH", "fscan/fscan.exe")
+    FSCAN_LINUX_PATH = os.getenv("FSCAN_LINUX_PATH", "fscan/fscan")
+    FSCAN_DEFAULT_PATH = os.getenv("FSCAN_DEFAULT_PATH")
+    FSCAN_OUTPUT_DIR = os.getenv("FSCAN_OUTPUT_DIR", "downloads/scan_reports")
+
 class DevConfig(BaseConfig):
     DEBUG = True
 

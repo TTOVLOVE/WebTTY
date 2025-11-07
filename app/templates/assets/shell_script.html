@@ -356,6 +356,16 @@ wmic process get name,processid,parentprocessid`
     socket.on('command_result', (data) => {
       handleExecutionResult(data);
     });
+
+    // 批量命令结果（包含安全阻止/警告信息）
+    socket.on('batch_command_result', (data) => {
+      // 统一转换为 handleExecutionResult 可识别的结构
+      handleExecutionResult({
+        output: data.output,
+        target_id: data.client_id,
+        is_error: !!data.is_error
+      });
+    });
   }
   
   function setupEventListeners() {

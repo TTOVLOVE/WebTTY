@@ -1,0 +1,1186 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}安全组管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .security-group-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .security-group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    
+    .security-group-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .security-group-type {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .type-system { background: #e3f2fd; color: #1976d2; }
+    .type-template { background: #f3e5f5; color: #7b1fa2; }
+    .type-custom { background: #e8f5e8; color: #388e3c; }
+    
+    .security-group-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 8px;
+    }
+    
+    .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+        color: #666;
+    }
+    
+    .rule-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        background: #f9f9f9;
+    }
+    
+    .rule-content {
+        flex: 1;
+    }
+    
+    .rule-type {
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .rule-value {
+        color: #666;
+        font-family: monospace;
+        margin-top: 4px;
+    }
+    
+    .rule-action {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+    
+    .action-block { background: #ffebee; color: #c62828; }
+    .action-warn { background: #fff3e0; color: #ef6c00; }
+    .action-allow { background: #e8f5e8; color: #2e7d32; }
+    
+    .btn-group-sm .btn {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    .modal-lg {
+        max-width: 800px;
+    }
+    
+    .form-group {
+        margin-bottom: 16px;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 4px;
+        display: block;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .form-control:focus {
+        border-color: #007bff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+    }
+    
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-warning { background: #ffc107; color: #212529; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-secondary { background: #6c757d; color: white; }
+    
+    .btn:hover {
+        opacity: 0.9;
+    }
+    
+    .alert {
+        padding: 12px 16px;
+        border-radius: 4px;
+        margin-bottom: 16px;
+    }
+    
+    .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin-top: 20px;
+    }
+    
+    .pagination .btn {
+        padding: 6px 12px;
+        font-size: 14px;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+    }
+    
+    .empty-state h3 {
+        margin-bottom: 8px;
+        color: #999;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- 页面标题和操作按钮 -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>安全组管理</h2>
+                <div>
+                    <button class="btn btn-success" onclick="showCreateSecurityGroupModal()">
+                        <i class="fas fa-plus"></i> 创建安全组
+                    </button>
+                    <button class="btn btn-primary" onclick="showImportTemplateModal()">
+                        <i class="fas fa-download"></i> 导入模板
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 搜索和筛选 -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="form-label">搜索安全组</label>
+                                <input type="text" class="form-control" id="searchInput" placeholder="输入安全组名称或描述">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="form-label">安全组类型</label>
+                                <select class="form-control" id="groupTypeFilter">
+                                    <option value="">全部类型</option>
+                                    <option value="system">系统预设</option>
+                                    <option value="template">模板</option>
+                                    <option value="custom">自定义</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">&nbsp;</label>
+                                <button class="btn btn-primary form-control" onclick="loadSecurityGroups()">
+                                    <i class="fas fa-search"></i> 搜索
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 安全组列表 -->
+            <div id="securityGroupsList">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i> 加载中...
+                </div>
+            </div>
+            
+            <!-- 分页 -->
+            <div id="pagination"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 创建/编辑安全组模态框 -->
+<div class="modal fade" id="securityGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="securityGroupModalTitle">创建安全组</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="securityGroupForm">
+                    <input type="hidden" id="securityGroupId">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">安全组名称 *</label>
+                                <input type="text" class="form-control" id="groupName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">安全组类型</label>
+                                <select class="form-control" id="groupType">
+                                    <option value="custom">自定义</option>
+                                    <option value="template">模板</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="groupDescription" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">父安全组</label>
+                                <select class="form-control" id="parentGroupId">
+                                    <option value="">无（根安全组）</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">状态</label>
+                                <select class="form-control" id="groupIsActive">
+                                    <option value="true">启用</option>
+                                    <option value="false">禁用</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveSecurityGroup()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 安全组规则模态框 -->
+<div class="modal fade" id="rulesModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rulesModalTitle">安全组规则</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6>规则列表</h6>
+                    <button class="btn btn-success btn-sm" onclick="showAddRuleModal()">
+                        <i class="fas fa-plus"></i> 添加规则
+                    </button>
+                </div>
+                <div id="rulesList">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑规则模态框 -->
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ruleModalTitle">添加规则</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ruleForm">
+                    <input type="hidden" id="ruleId">
+                    <input type="hidden" id="ruleSecurityGroupId">
+                    <div class="form-group">
+                        <label class="form-label">规则类型 *</label>
+                        <select class="form-control" id="ruleType" required onchange="updateRuleValuePlaceholder()">
+                            <option value="command">精确命令</option>
+                            <option value="pattern">正则模式</option>
+                            <option value="category">命令分类</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">规则值 *</label>
+                        <input type="text" class="form-control" id="ruleValue" required>
+                        <small class="form-text text-muted" id="ruleValueHelp">输入要匹配的命令</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">动作 *</label>
+                                <select class="form-control" id="ruleAction" required>
+                                    <option value="block">阻止</option>
+                                    <option value="warn">警告</option>
+                                    <option value="allow">允许</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">优先级</label>
+                                <input type="number" class="form-control" id="rulePriority" value="100" min="1" max="1000">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">状态</label>
+                                <select class="form-control" id="ruleIsActive">
+                                    <option value="true">启用</option>
+                                    <option value="false">禁用</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="ruleDescription" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveRule()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入模板模态框 -->
+<div class="modal fade" id="importTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">导入安全组模板</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="templatesList">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> 加载模板...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 分配客户端模态框 -->
+<div class="modal fade" id="assignClientsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">分配客户端到：<span id="assignGroupName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="assignSearchInput" placeholder="搜索客户端（名称/IP/系统/用户）" oninput="filterClientsForAssign()">
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-secondary" onclick="toggleSelectAllClients()">
+                            <i class="fas fa-check-square"></i> 全选/取消全选
+                        </button>
+                    </div>
+                </div>
+                <div id="clientsAssignList" class="border rounded" style="max-height: 500px; overflow: auto;">
+                    <div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载客户端...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <span class="me-auto text-muted" id="assignSelectedCount">已选择 0 个客户端</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="performBatchAssign()">确认分配</button>
+            </div>
+        </div>
+    </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let currentSecurityGroupId = null;
+let assignCurrentGroupId = null;
+let allClientsForAssign = [];
+let filteredClientsForAssign = [];
+let selectedClientIds = new Set();
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadSecurityGroups();
+    loadParentGroups();
+});
+
+// 加载安全组列表
+function loadSecurityGroups(page = 1) {
+    currentPage = page;
+    const search = document.getElementById('searchInput').value;
+    const groupType = document.getElementById('groupTypeFilter').value;
+    
+    const params = new URLSearchParams({
+        page: page,
+        per_page: 10,
+        search: search,
+        group_type: groupType
+    });
+    
+    document.getElementById('securityGroupsList').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>';
+    
+    fetch(`/api/security-groups?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderSecurityGroups(data.data.security_groups);
+                renderPagination(data.data.pagination);
+            } else {
+                showAlert('danger', data.message || '加载安全组失败');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', '网络错误，请稍后重试');
+        });
+}
+
+// 渲染安全组列表
+function renderSecurityGroups(securityGroups) {
+    const container = document.getElementById('securityGroupsList');
+    
+    if (securityGroups.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <h3>暂无安全组</h3>
+                <p>点击"创建安全组"按钮开始创建您的第一个安全组</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const html = securityGroups.map(group => `
+        <div class="security-group-card">
+            <div class="security-group-header">
+                <div>
+                    <div class="security-group-title">${escapeHtml(group.name)}</div>
+                    <span class="security-group-type type-${group.group_type}">${getGroupTypeText(group.group_type)}</span>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-primary" onclick="showRules(${group.id}, '${escapeHtml(group.name)}')">
+                        <i class="fas fa-list"></i> 规则
+                    </button>
+                    <button class="btn btn-secondary" onclick="showAssignClientsModal(${group.id}, '${escapeHtml(group.name)}')">
+                        <i class="fas fa-user-cog"></i> 分配客户端
+                    </button>
+                    <button class="btn btn-warning" onclick="editSecurityGroup(${group.id})">
+                        <i class="fas fa-edit"></i> 编辑
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteSecurityGroup(${group.id}, '${escapeHtml(group.name)}')">
+                        <i class="fas fa-trash"></i> 删除
+                    </button>
+                </div>
+            </div>
+            <div class="security-group-description">
+                ${group.description ? escapeHtml(group.description) : '<em>无描述</em>'}
+            </div>
+            <div class="security-group-stats">
+                <div class="stat-item">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>规则数: ${group.rule_count || 0}</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-desktop"></i>
+                    <span>客户端数: ${group.client_count || 0}</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-clock"></i>
+                    <span>创建时间: ${formatDateTime(group.created_at)}</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-${group.is_active ? 'check-circle text-success' : 'times-circle text-danger'}"></i>
+                    <span>${group.is_active ? '启用' : '禁用'}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// 渲染分页
+function renderPagination(pagination) {
+    const container = document.getElementById('pagination');
+    
+    if (pagination.pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<div class="pagination">';
+    
+    // 上一页
+    if (pagination.has_prev) {
+        html += `<button class="btn btn-secondary" onclick="loadSecurityGroups(${pagination.page - 1})">上一页</button>`;
+    }
+    
+    // 页码
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.pages, pagination.page + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const isActive = i === pagination.page;
+        html += `<button class="btn ${isActive ? 'btn-primary' : 'btn-secondary'}" onclick="loadSecurityGroups(${i})">${i}</button>`;
+    }
+    
+    // 下一页
+    if (pagination.has_next) {
+        html += `<button class="btn btn-secondary" onclick="loadSecurityGroups(${pagination.page + 1})">下一页</button>`;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// 显示创建安全组模态框
+function showCreateSecurityGroupModal() {
+    document.getElementById('securityGroupModalTitle').textContent = '创建安全组';
+    document.getElementById('securityGroupForm').reset();
+    document.getElementById('securityGroupId').value = '';
+    new bootstrap.Modal(document.getElementById('securityGroupModal')).show();
+}
+
+// 编辑安全组
+function editSecurityGroup(groupId) {
+    fetch(`/api/security-groups/${groupId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const group = data.data;
+                document.getElementById('securityGroupModalTitle').textContent = '编辑安全组';
+                document.getElementById('securityGroupId').value = group.id;
+                document.getElementById('groupName').value = group.name;
+                document.getElementById('groupDescription').value = group.description || '';
+                document.getElementById('groupType').value = group.group_type;
+                document.getElementById('parentGroupId').value = group.parent_group_id || '';
+                document.getElementById('groupIsActive').value = group.is_active.toString();
+                
+                new bootstrap.Modal(document.getElementById('securityGroupModal')).show();
+            } else {
+                showAlert('danger', data.message || '获取安全组信息失败');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', '网络错误，请稍后重试');
+        });
+}
+
+// 保存安全组
+function saveSecurityGroup() {
+    const form = document.getElementById('securityGroupForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const groupId = document.getElementById('securityGroupId').value;
+    const data = {
+        name: document.getElementById('groupName').value,
+        description: document.getElementById('groupDescription').value,
+        group_type: document.getElementById('groupType').value,
+        parent_group_id: document.getElementById('parentGroupId').value || null,
+        is_active: document.getElementById('groupIsActive').value === 'true'
+    };
+    
+    const url = groupId ? `/api/security-groups/${groupId}` : '/api/security-groups';
+    const method = groupId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            bootstrap.Modal.getInstance(document.getElementById('securityGroupModal')).hide();
+            loadSecurityGroups(currentPage);
+            loadParentGroups();
+        } else {
+            showAlert('danger', data.message || '保存失败');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+
+// 删除安全组
+function deleteSecurityGroup(groupId, groupName) {
+    if (!confirm(`确定要删除安全组"${groupName}"吗？此操作不可撤销。`)) {
+        return;
+    }
+    
+    fetch(`/api/security-groups/${groupId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            loadSecurityGroups(currentPage);
+        } else {
+            showAlert('danger', data.message || '删除失败');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+
+// 显示安全组规则
+function showRules(groupId, groupName) {
+    currentSecurityGroupId = groupId;
+    document.getElementById('rulesModalTitle').textContent = `${groupName} - 规则管理`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('rulesModal'));
+    modal.show();
+    
+    loadRules(groupId);
+}
+
+// 加载规则列表
+function loadRules(groupId) {
+    document.getElementById('rulesList').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>';
+    
+    fetch(`/api/security-groups/${groupId}/rules`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderRules(data.data.rules);
+            } else {
+                showAlert('danger', data.message || '加载规则失败');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', '网络错误，请稍后重试');
+        });
+}
+
+// 渲染规则列表
+function renderRules(rules) {
+    const container = document.getElementById('rulesList');
+    
+    if (rules.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <h6>暂无规则</h6>
+                <p>点击"添加规则"按钮开始创建规则</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const html = rules.map(rule => `
+        <div class="rule-item">
+            <div class="rule-content">
+                <div class="rule-type">${getRuleTypeText(rule.rule_type)}</div>
+                <div class="rule-value">${escapeHtml(rule.rule_value)}</div>
+                ${rule.description ? `<div class="text-muted small">${escapeHtml(rule.description)}</div>` : ''}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="rule-action action-${rule.action}">${getActionText(rule.action)}</span>
+                <span class="badge bg-info">优先级: ${rule.priority}</span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-warning" onclick="editRule(${rule.id})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteRule(${rule.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// 显示添加规则模态框
+function showAddRuleModal() {
+    document.getElementById('ruleModalTitle').textContent = '添加规则';
+    document.getElementById('ruleForm').reset();
+    document.getElementById('ruleId').value = '';
+    document.getElementById('ruleSecurityGroupId').value = currentSecurityGroupId;
+    document.getElementById('rulePriority').value = '100';
+    updateRuleValuePlaceholder();
+    new bootstrap.Modal(document.getElementById('ruleModal')).show();
+}
+
+// 编辑规则
+function editRule(ruleId) {
+    // 这里需要获取规则详情，简化处理
+    document.getElementById('ruleModalTitle').textContent = '编辑规则';
+    document.getElementById('ruleId').value = ruleId;
+    new bootstrap.Modal(document.getElementById('ruleModal')).show();
+}
+
+// 保存规则
+function saveRule() {
+    const form = document.getElementById('ruleForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const ruleId = document.getElementById('ruleId').value;
+    const data = {
+        rule_type: document.getElementById('ruleType').value,
+        rule_value: document.getElementById('ruleValue').value,
+        action: document.getElementById('ruleAction').value,
+        priority: parseInt(document.getElementById('rulePriority').value),
+        is_active: document.getElementById('ruleIsActive').value === 'true',
+        description: document.getElementById('ruleDescription').value
+    };
+    
+    const url = ruleId ? `/api/security-groups/rules/${ruleId}` : `/api/security-groups/${currentSecurityGroupId}/rules`;
+    const method = ruleId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            bootstrap.Modal.getInstance(document.getElementById('ruleModal')).hide();
+            loadRules(currentSecurityGroupId);
+        } else {
+            showAlert('danger', data.message || '保存失败');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+
+// 删除规则
+function deleteRule(ruleId) {
+    if (!confirm('确定要删除此规则吗？')) {
+        return;
+    }
+    
+    fetch(`/api/security-groups/rules/${ruleId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            loadRules(currentSecurityGroupId);
+        } else {
+            showAlert('danger', data.message || '删除失败');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+
+// 显示导入模板模态框
+function showImportTemplateModal() {
+    const modal = new bootstrap.Modal(document.getElementById('importTemplateModal'));
+    modal.show();
+    loadTemplates();
+}
+
+// 加载模板列表
+function loadTemplates() {
+    document.getElementById('templatesList').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载模板...</div>';
+    
+    fetch('/api/security-groups/templates')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderTemplates(data.data.templates);
+            } else {
+                showAlert('danger', data.message || '加载模板失败');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', '网络错误，请稍后重试');
+        });
+}
+
+// 渲染模板列表
+function renderTemplates(templates) {
+    const container = document.getElementById('templatesList');
+    
+    const html = templates.map(template => `
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-title">${escapeHtml(template.name)}</h6>
+                <p class="card-text">${escapeHtml(template.description)}</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">规则数: ${template.rules.length}</small>
+                    <button class="btn btn-primary btn-sm" onclick="importTemplate('${template.id}')">
+                        <i class="fas fa-download"></i> 导入
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// 导入模板
+function importTemplate(templateId) {
+    fetch('/api/security-groups/import-template', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ template_id: templateId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            bootstrap.Modal.getInstance(document.getElementById('importTemplateModal')).hide();
+            loadSecurityGroups(currentPage);
+        } else {
+            showAlert('danger', data.message || '导入失败');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+
+// 加载父安全组选项
+function loadParentGroups() {
+    fetch('/api/security-groups?per_page=100')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('parentGroupId');
+                const currentOptions = select.innerHTML;
+                const newOptions = data.data.security_groups.map(group => 
+                    `<option value="${group.id}">${escapeHtml(group.name)}</option>`
+                ).join('');
+                select.innerHTML = '<option value="">无（根安全组）</option>' + newOptions;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading parent groups:', error);
+        });
+}
+
+// 更新规则值占位符
+function updateRuleValuePlaceholder() {
+    const ruleType = document.getElementById('ruleType').value;
+    const ruleValue = document.getElementById('ruleValue');
+    const helpText = document.getElementById('ruleValueHelp');
+    
+    switch (ruleType) {
+        case 'command':
+            ruleValue.placeholder = '例如: ipconfig';
+            helpText.textContent = '输入要精确匹配的命令';
+            break;
+        case 'pattern':
+            ruleValue.placeholder = '例如: ^(rm|del)\\s+.*';
+            helpText.textContent = '输入正则表达式模式';
+            break;
+        case 'category':
+            ruleValue.placeholder = '例如: system_info';
+            helpText.textContent = '输入命令分类名称';
+            break;
+    }
+}
+
+// 工具函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDateTime(dateString) {
+    return new Date(dateString).toLocaleString('zh-CN');
+}
+
+function getGroupTypeText(type) {
+    const types = {
+        'system': '系统预设',
+        'template': '模板',
+        'custom': '自定义'
+    };
+    return types[type] || type;
+}
+
+function getRuleTypeText(type) {
+    const types = {
+        'command': '精确命令',
+        'pattern': '正则模式',
+        'category': '命令分类'
+    };
+    return types[type] || type;
+}
+
+function getActionText(action) {
+    const actions = {
+        'block': '阻止',
+        'warn': '警告',
+        'allow': '允许'
+    };
+    return actions[action] || action;
+}
+
+function showAlert(type, message) {
+    // 创建警告框
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // 插入到页面顶部
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+// 搜索框回车事件
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        loadSecurityGroups();
+    }
+});
+
+// 分配客户端相关逻辑
+function showAssignClientsModal(groupId, groupName) {
+    assignCurrentGroupId = groupId;
+    document.getElementById('assignGroupName').textContent = groupName;
+    selectedClientIds.clear();
+    document.getElementById('assignSelectedCount').textContent = `已选择 ${selectedClientIds.size} 个客户端`;
+    const modal = new bootstrap.Modal(document.getElementById('assignClientsModal'));
+    modal.show();
+    loadClientsForAssign();
+}
+
+function loadClientsForAssign() {
+    const list = document.getElementById('clientsAssignList');
+    list.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载客户端...</div>';
+    // 使用管理员接口获取完整客户端列表
+    fetch('/api/admin/clients')
+        .then(res => res.json())
+        .then(data => {
+            // 兼容不同返回结构：有的接口返回 { success, data: { clients } }，管理员接口返回 { clients, total, online, max }
+            const clients = (data && data.data && data.data.clients !== undefined)
+                ? data.data.clients
+                : data && data.clients;
+
+            if (Array.isArray(clients)) {
+                allClientsForAssign = clients;
+                filteredClientsForAssign = allClientsForAssign;
+                renderClientsForAssign();
+            } else {
+                const msg = (data && (data.message || data.error)) ? (data.message || data.error) : '加载客户端失败';
+                list.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+            }
+        })
+        .catch(err => {
+            console.error('Load clients error:', err);
+            list.innerHTML = '<div class="alert alert-danger">网络错误，请稍后重试</div>';
+        });
+}
+
+function renderClientsForAssign() {
+    const container = document.getElementById('clientsAssignList');
+    if (!filteredClientsForAssign || filteredClientsForAssign.length === 0) {
+        container.innerHTML = '<div class="empty-state"><h6>暂无客户端</h6><p>没有可分配的客户端</p></div>';
+        return;
+    }
+    const rows = filteredClientsForAssign.map(c => `
+        <tr>
+            <td style="width:40px;">
+                <input type="checkbox" class="form-check-input assign-checkbox" data-id="${c.id}" ${selectedClientIds.has(c.id) ? 'checked' : ''} onchange="onClientSelectChange(${c.id}, this.checked)">
+            </td>
+            <td>${escapeHtml(c.name || c.hostname || '')}</td>
+            <td>${escapeHtml(c.ip || '')}</td>
+            <td>${escapeHtml(c.os_type || c.os || '')}</td>
+            <td>${escapeHtml(c.owner || c.user || '')}</td>
+            <td><span class="badge ${c.status === 'online' ? 'bg-success' : 'bg-secondary'}">${escapeHtml(c.status || 'unknown')}</span></td>
+        </tr>
+    `).join('');
+    container.innerHTML = `
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>名称</th>
+                    <th>IP</th>
+                    <th>系统</th>
+                    <th>用户</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+    `;
+}
+
+function onClientSelectChange(id, checked) {
+    if (checked) {
+        selectedClientIds.add(id);
+    } else {
+        selectedClientIds.delete(id);
+    }
+    document.getElementById('assignSelectedCount').textContent = `已选择 ${selectedClientIds.size} 个客户端`;
+}
+
+function toggleSelectAllClients() {
+    const nowSelectAll = selectedClientIds.size !== filteredClientsForAssign.length;
+    selectedClientIds.clear();
+    if (nowSelectAll) {
+        for (const c of filteredClientsForAssign) selectedClientIds.add(c.id);
+    }
+    // 更新UI勾选状态
+    document.querySelectorAll('#clientsAssignList .assign-checkbox').forEach(cb => {
+        const id = parseInt(cb.getAttribute('data-id'));
+        cb.checked = selectedClientIds.has(id);
+    });
+    document.getElementById('assignSelectedCount').textContent = `已选择 ${selectedClientIds.size} 个客户端`;
+}
+
+function filterClientsForAssign() {
+    const q = document.getElementById('assignSearchInput').value.trim().toLowerCase();
+    if (!q) {
+        filteredClientsForAssign = allClientsForAssign;
+    } else {
+        filteredClientsForAssign = allClientsForAssign.filter(c => {
+            const fields = [c.name, c.hostname, c.ip, c.os_type, c.os, c.owner, c.user].map(x => (x || '').toString().toLowerCase());
+            return fields.some(v => v.includes(q));
+        });
+    }
+    renderClientsForAssign();
+}
+
+function performBatchAssign() {
+    if (!assignCurrentGroupId) return;
+    const ids = Array.from(selectedClientIds);
+    if (ids.length === 0) {
+        showAlert('warning', '请先选择至少一个客户端');
+        return;
+    }
+    const payload = {
+        client_ids: ids,
+        security_group_id: assignCurrentGroupId
+    };
+    fetch('/api/clients/batch-assign-security-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const successCount = data.data?.success_count ?? ids.length;
+            const failed = data.data?.failed_clients || [];
+            const msg = failed.length === 0
+                ? `成功分配 ${successCount} 个客户端`
+                : `成功分配 ${successCount} 个，失败 ${failed.length} 个`;
+            showAlert('success', msg);
+            const modalEl = document.getElementById('assignClientsModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            // 刷新列表以更新客户端数
+            loadSecurityGroups(currentPage);
+        } else {
+            showAlert('danger', data.message || '分配失败');
+        }
+    })
+    .catch(err => {
+        console.error('Batch assign error:', err);
+        showAlert('danger', '网络错误，请稍后重试');
+    });
+}
+</script>
+{% endblock %}

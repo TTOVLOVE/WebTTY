@@ -52,6 +52,12 @@
             <span>客户端列表</span>
           </a>
         </div>
+        <div class="nav-item">
+          <a href="{{ url_for('security_groups.security_groups_page') }}" class="nav-link {% if request.endpoint == 'security_groups.security_groups_page' %}active{% endif %}">
+            <i class='bx bx-shield'></i>
+            <span>安全组</span>
+          </a>
+        </div>
         
         <div class="nav-section">
           <div class="nav-section-title">系统文件管理</div>
